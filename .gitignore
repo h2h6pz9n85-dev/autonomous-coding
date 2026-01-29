@@ -1,0 +1,76 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+.env
+.venv/
+pip-log.txt
+pip-delete-this-directory.txt
+.pytest_cache/
+*.egg-info/
+*.egg
+.eggs/
+
+# Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.cache/
+
+# Build outputs
+dist/
+build/
+*.manifest
+*.spec
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.project
+.pydevproject
+.settings/
+
+# OS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+Thumbs.db
+ehthumbs.db
+
+# Project specific - generated content
+generations/
+data/
+*.log
+
+# Agent state files (generated during runs)
+.agent_config.json
+.agent_state.json
+.claude_settings.json
+
+# Backup files
+.backups/
+*.bak
+
+# Test artifacts
+coverage/
+htmlcov/
+.coverage
+.tox/
+.nox/
+playwright-report/
+test-results/
+
+# Playwright
+.playwright-mcp/
+webui/

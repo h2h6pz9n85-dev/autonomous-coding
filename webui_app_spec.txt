@@ -1,0 +1,267 @@
+<app_specification>
+  <name>Agent WebUI - Autonomous Coding Monitor</name>
+
+  <overview>
+    Real-time web UI for monitoring autonomous coding agent sessions. Displays a 4-column grid
+    interface where each column represents an agent type (IMPLEMENT, REVIEW, FIX, ARCHITECTURE)
+    and rows represent iterations through the agent cycle. Uses Server-Sent Events for live
+    updates as JSON files change on disk.
+  </overview>
+
+  <scope_constraints>
+    <allowed_paths>
+      - autonomous-coding/webui/ (all webui code)
+    </allowed_paths>
+    <forbidden_paths>
+      - autonomous-coding/*.py (core agent framework)
+      - autonomous-coding/prompts/ (agent prompts)
+      - autonomous-coding/tests/ (framework tests)
+      - products/
+      - shared/
+    </forbidden_paths>
+  </scope_constraints>
+
+  <technology_stack>
+    <frontend>
+      <framework>Vue 3 with Composition API</framework>
+      <state>Pinia store</state>
+      <build>Vite 5</build>
+      <styling>Plain CSS with CSS variables (no frameworks)</styling>
+      <port>5173 (dev), served by backend in production</port>
+    </frontend>
+    <backend>
+      <framework>FastAPI</framework>
+      <file_watching>watchfiles library</file_watching>
+      <sse>sse-starlette library</sse>
+      <port>8000</port>
+    </backend>
+    <testing>
+      <backend>pytest</backend>
+      <frontend>Vitest</frontend>
+    </testing>
+  </technology_stack>
+
+  <core_features>
+    <session_grid>
+      <description>4-column grid displaying agent session data</description>
+      <columns>IMPLEMENT, REVIEW, FIX, ARCHITECTURE</columns>
+      <rows>Each row represents one iteration through the agent cycle</rows>
+      <cell_states>
+        - Active: highlighted border, pulsing indicator (current agent)
+        - Completed: normal styling, all sections available
+        - Empty: grayed out, no content for this agent in row
+      </cell_states>
+    </session_grid>
+
+    <expandable_sections>
+      <description>Each cell has three collapsible sections</description>
+      <sections>
+        <section name="Structured Data" default="expanded">
+          Feature info, review verdicts, issues list, checklist results
+        </section>
+        <section name="Session History" default="collapsed">
+          Timestamps, outcome, commits, summary
+        </section>
+        <section name="Console Output" default="collapsed">
+          Raw agent output if captured
+        </section>
+      </sections>
+    </expandable_sections>
+
+    <column_minimization>
+      <description>Columns can be minimized to save space</description>
+      <expanded_width>1fr (equal share)</expanded_width>
+      <minimized_width>48px</minimized_width>
+      <minimized_content>Vertical rotated label with icon</minimized_content>
+      <interactions>
+        - Click header to toggle minimize/expand
+        - Double-click to focus (expand this, minimize others)
+        - State persisted in localStorage
+      </interactions>
+    </column_minimization>
+
+    <live_updates>
+      <description>Real-time updates via Server-Sent Events</description>
+      <watched_files>
+        - progress.json (session history)
+        - reviews.json (review verdicts and issues)
+        - architecture_reviews.json
+        - feature_list.json
+      </watched_files>
+      <behavior>
+        - On file change, backend parses and pushes update via SSE
+        - Frontend receives update, re-renders affected cells
+        - Auto-reconnect with exponential backoff (1s, 2s, 4s, max 30s)
+      </behavior>
+    </live_updates>
+
+    <status_bar>
+      <description>Top bar showing connection status and project info</description>
+      <elements>
+        - Connection indicator (green=connected, yellow=reconnecting, red=disconnected)
+        - Project name
+        - Progress counter (e.g., "15/50 features done")
+      </elements>
+    </status_bar>
+
+    <dark_light_mode>
+      <description>Theme toggle using CSS variables</description>
+      <persistence>localStorage</persistence>
+    </dark_light_mode>
+  </core_features>
+
+  <directory_structure>
+    <path>autonomous-coding/webui/</path>
+    <structure>
+      webui/
+      ├── backend/
+      │   ├── main.py              # FastAPI app, CLI args, static serving
+      │   ├── routes.py            # API endpoint definitions
+      │   ├── watcher.py           # File watching + SSE broadcasting
+      │   ├── parsers.py           # JSON parsing + row assembly
+      │   └── requirements.txt     # Python dependencies
+      │
+      ├── frontend/
+      │   ├── index.html           # Entry HTML
+      │   ├── src/
+      │   │   ├── App.vue          # Root component with status bar
+      │   │   ├── main.js          # Vue app bootstrap
+      │   │   ├── components/
+      │   │   │   ├── SessionGrid.vue
+      │   │   │   ├── AgentColumn.vue
+      │   │   │   ├── SessionCell.vue
+      │   │   │   └── ExpandableSection.vue
+      │   │   ├── composables/
+      │   │   │   └── useSSE.js
+      │   │   └── stores/
+      │   │       └── sessions.js
+      │   ├── package.json
+      │   └── vite.config.js
+      │
+      └── README.md
+    </structure>
+  </directory_structure>
+
+  <api_endpoints>
+    <endpoint method="GET" path="/api/sessions">
+      Returns all session data merged from JSON files
+    </endpoint>
+    <endpoint method="GET" path="/api/stream">
+      SSE endpoint - pushes updates on file changes
+    </endpoint>
+    <endpoint method="GET" path="/api/health">
+      Health check endpoint
+    </endpoint>
+  </api_endpoints>
+
+  <data_schema>
+    <session_data>
+      {
+        "project": {
+          "name": "Project Name",
+          "total_features": 50,
+          "features_completed": 15
+        },
+        "rows": [
+          {
+            "row_id": 1,
+            "timestamp": "2025-01-29T10:00:00Z",
+            "agent_type": "IMPLEMENT",
+            "session": {
+              "session_id": 1,
+              "outcome": "READY_FOR_REVIEW",
+              "summary": "Implemented F001...",
+              "features_touched": ["F001"],
+              "commits": [{"hash": "abc123", "message": "..."}],
+              "duration_seconds": 120
+            },
+            "structured_data": {
+              "feature": {"id": "F001", "name": "Health Check", "passes": false}
+            }
+          }
+        ]
+      }
+    </session_data>
+    <sse_event>
+      {
+        "event": "update",
+        "data": { /* same shape as /api/sessions */ }
+      }
+    </sse_event>
+  </data_schema>
+
+  <cli_configuration>
+    <argument name="--project-dir">
+      Directory containing JSON files to watch.
+      Defaults to parent directory (../) assuming webui is inside autonomous-coding.
+    </argument>
+    <example>python main.py --project-dir /path/to/generated-project</example>
+  </cli_configuration>
+
+  <error_handling>
+    <backend_errors>
+      - JSON file missing: Return empty data, log warning
+      - JSON parse error: Keep last valid state, log error
+      - Project dir not found: Return 503 with clear message
+    </backend_errors>
+    <frontend_errors>
+      - SSE connection fails: Show reconnecting indicator, retry with backoff
+      - SSE reconnected: Show brief "Connected" toast
+      - Invalid data: Log to console, ignore malformed update
+    </frontend_errors>
+  </error_handling>
+
+  <dependencies>
+    <backend>
+      fastapi>=0.109.0
+      uvicorn>=0.27.0
+      watchfiles>=0.21.0
+      sse-starlette>=1.8.0
+    </backend>
+    <frontend>
+      vue: ^3.4
+      pinia: ^2.1
+      vite: ^5.0
+    </frontend>
+  </dependencies>
+
+  <user_flows>
+    <flow name="Monitor Active Session">
+      1. Start backend: python main.py --project-dir /path/to/project
+      2. Start frontend: npm run dev (or access backend at :8000 in production)
+      3. View 4-column grid with current agent highlighted
+      4. Expand sections to see details (structured data expanded by default)
+      5. Minimize unused columns to focus on active agent
+      6. Watch live updates as agents complete sessions
+    </flow>
+
+    <flow name="Review Past Sessions">
+      1. Scroll through rows to see session history
+      2. Expand "Session History" section for timestamps and commits
+      3. Compare multiple rows to track feature progress
+    </flow>
+  </user_flows>
+
+  <success_criteria>
+    <functionality>
+      - Grid displays all 4 agent columns correctly
+      - Rows populate from JSON files accurately
+      - SSE updates arrive within 1 second of file change
+      - Column minimization works with state persistence
+      - Expandable sections toggle correctly
+      - Dark/light mode switches properly
+    </functionality>
+    <user_experience>
+      - Clear visual distinction between active and completed cells
+      - Smooth transitions for expand/collapse
+      - Responsive reconnection with clear status indicators
+      - Clean, professional interface
+    </user_experience>
+    <reliability>
+      - Handles missing/malformed JSON gracefully
+      - Reconnects automatically after connection loss
+      - No memory leaks from SSE connections
+      - Works in Chrome, Firefox, Safari
+    </reliability>
+  </success_criteria>
+</app_specification>

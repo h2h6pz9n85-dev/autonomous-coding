@@ -1,0 +1,2 @@
+# No Python dependencies needed - uses Claude Code CLI
+# Claude Code CLI is installed via: npm install -g @anthropic-ai/claude-code
