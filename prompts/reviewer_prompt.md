@@ -162,7 +162,95 @@ git diff {{MAIN_BRANCH}}..HEAD
 
 ---
 
-## STEP 4: REVIEW THE CHANGES
+## PHASE 1: ADVERSARIAL EVIDENCE REVIEW (BEFORE CODE REVIEW)
+
+**Mindset: The feature is BROKEN. Your job is to prove it.**
+
+### STEP 4: LOAD VERIFICATION EVIDENCE
+
+Check if verification evidence exists from the IMPLEMENT/FIX agent:
+
+```bash
+SESSION_ID=$(python3 scripts/progress.py get-session -1 --field session_id)
+python3 scripts/verification.py status --session-id $SESSION_ID
+```
+
+If verification folder exists, examine it:
+
+```bash
+# Read verification report
+cat "{{AGENT_STATE_DIR}}/verification/$SESSION_ID/verification.md"
+
+# List screenshots
+ls "{{AGENT_STATE_DIR}}/verification/$SESSION_ID/screenshots/"
+
+# Check test evidence
+cat "{{AGENT_STATE_DIR}}/verification/$SESSION_ID/test_evidence/test_output.txt"
+```
+
+### STEP 5: ANALYZE EVIDENCE CRITICALLY
+
+**For EACH screenshot in the verification folder:**
+
+| Question | Your Analysis |
+|----------|---------------|
+| What SHOULD this show per spec? | [expected behavior] |
+| What DOES it actually show? | [observed behavior] |
+| What's MISSING that should be visible? | [missing elements] |
+| What's WRONG that shouldn't be there? | [incorrect elements] |
+
+**Self-check:** If any discrepancy exists between expected and observed → flag for attack testing.
+
+### STEP 6: EXECUTE ADVERSARIAL ATTACKS (MANDATORY)
+
+**You MUST attempt ALL attacks from `prompts/adversarial_attack_checklist.md`.**
+
+```bash
+cat prompts/adversarial_attack_checklist.md
+```
+
+For each attack:
+1. Attempt the attack via browser automation
+2. Document what you tried
+3. Document the result
+4. Take screenshot evidence
+5. Conclude: BROKEN or NOT_BROKEN
+
+**Save attack results:**
+
+```bash
+mkdir -p "{{AGENT_STATE_DIR}}/verification/$SESSION_ID/attacks"
+# Save attack screenshots there
+```
+
+### STEP 7: BEHAVIORAL VERDICT
+
+**ZERO-TOLERANCE RULE:** Any observed behavioral issue = REQUEST_CHANGES.
+
+| Condition | Verdict | Next Step |
+|-----------|---------|-----------|
+| ANY attack = BROKEN | REQUEST_CHANGES | Skip code review, document issue |
+| ANY observed behavioral issue | REQUEST_CHANGES | Skip code review, document issue |
+| Evidence incomplete/missing | REQUEST_CHANGES | Document what's missing |
+| ALL attacks = NOT_BROKEN | PASS | Proceed to code review |
+
+**Invalid Rationalizations (DO NOT USE):**
+
+| If You Think This... | The Reality Is... |
+|---------------------|-------------------|
+| "Backend works, frontend is separate" | If UI is wrong, feature is broken. REJECT. |
+| "Tests pass" | Tests can be incomplete. Visual evidence overrides. |
+| "Code change is correct" | Correct code + wrong behavior = broken. REJECT. |
+| "This is a different bug" | If seen during verification, it blocks approval. REJECT. |
+| "It's just an edge case" | Edge cases are bugs. REJECT. |
+
+⚠️ **If you cannot prove the feature works end-to-end through direct visual evidence, the answer is REQUEST_CHANGES. Period.**
+
+---
+
+## PHASE 2: CODE REVIEW (ONLY IF BEHAVIORAL VERIFICATION PASSED)
+
+### STEP 8: REVIEW THE CHANGES
 
 **Get feature specification:**
 
@@ -178,7 +266,7 @@ Review the code against:
 
 ---
 
-## STEP 5: RUN THE TESTS
+## STEP 9: RUN THE TESTS
 
 Run the project's test command(s) - check README, CLAUDE.md, or build files for the correct commands.
 
@@ -240,7 +328,7 @@ Do not substitute. Do not infer. Do not assume. REQUEST_CHANGES.
 
 ---
 
-## STEP 6: VERIFY THROUGH BROWSER (UI FEATURES)
+## STEP 10: VERIFY THROUGH BROWSER (UI FEATURES)
 
 **Applying the verification principle: For UI claims, screenshots are direct evidence.**
 
@@ -273,7 +361,7 @@ NO → You have NOT verified. REQUEST_CHANGES.
 
 ---
 
-## STEP 7: WRITE REVIEW (USE SCRIPT - MANDATORY)
+## STEP 11: WRITE REVIEW (USE SCRIPT - MANDATORY)
 
 **Create issues JSON file first (for complex reviews):**
 
@@ -313,7 +401,7 @@ python3 scripts/reviews.py add-review \
 
 ---
 
-## STEP 8: CREATE TECH DEBT ENTRIES (IF APPROVING WITH MINOR ISSUES)
+## STEP 12: CREATE TECH DEBT ENTRIES (IF APPROVING WITH MINOR ISSUES)
 
 **If you found minor/suggestion issues but are APPROVING or giving PASS_WITH_COMMENTS, convert them to tech debt entries:**
 
@@ -359,7 +447,7 @@ python3 scripts/features.py append \
 
 ---
 
-## STEP 9: WRITE PROGRESS SUMMARY (MANDATORY)
+## STEP 13: WRITE PROGRESS SUMMARY (MANDATORY)
 
 **Before recording the session, create a progress summary file:**
 
@@ -402,7 +490,7 @@ EOF
 
 ---
 
-## STEP 10: TAKE ACTION BASED ON VERDICT
+## STEP 14: TAKE ACTION BASED ON VERDICT
 
 ### If APPROVE (no issues):
 

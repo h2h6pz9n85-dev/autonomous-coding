@@ -12,7 +12,8 @@
 4. [Inter-Agent Communication](#inter-agent-communication)
 5. [Session Lifecycle](#session-lifecycle)
 6. [Key Design Patterns](#key-design-patterns)
-7. [File Reference](#file-reference)
+7. [Verification Evidence System](#verification-evidence-system)
+8. [File Reference](#file-reference)
 
 ---
 
@@ -586,6 +587,122 @@ Enforced via:
 
 ---
 
+## Verification Evidence System
+
+The verification evidence system eliminates self-verification bias by having independent agents verify work.
+
+### System Design
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                           IMPLEMENT/FIX SESSION                             │
+│                                                                             │
+│   1. Implement feature / fix issues                                         │
+│   2. Run tests                                                              │
+│   3. Spawn VERIFICATION SUBAGENT ────────────────────────┐                  │
+│      │                                                   │                  │
+│      │  Subagent receives ONLY:                          │                  │
+│      │  - Feature specification                          │                  │
+│      │  - Session ID                                     │                  │
+│      │  - URLs to test                                   │                  │
+│      │  - Verification folder path                       │                  │
+│      │                                                   ▼                  │
+│      │                                     ┌───────────────────────────┐    │
+│      │                                     │ VERIFICATION SUBAGENT     │    │
+│      │                                     │                           │    │
+│      │                                     │ - Run tests               │    │
+│      │                                     │ - Navigate UI             │    │
+│      │                                     │ - Take screenshots        │    │
+│      │                                     │ - Compare to spec         │    │
+│      │                                     │ - Write verification.md   │    │
+│      │                                     └─────────────┬─────────────┘    │
+│      │                                                   │                  │
+│      │                         ┌─────────────────────────┴────────────┐     │
+│      │                    VERIFIED                              NOT_VERIFIED│
+│      │                         │                                      │     │
+│      │                         ▼                                      ▼     │
+│      │                READY_FOR_REVIEW                    Coder fixes       │
+│      │                                                    Re-run subagent   │
+│      └──────────────────────────────────────────────────────────────────────┘
+└─────────────────────────────────────────────────────────────────────────────┘
+                                     │
+                                     ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                            REVIEW SESSION                                    │
+│                                                                             │
+│   PHASE 1: ADVERSARIAL EVIDENCE REVIEW (before code review)                 │
+│                                                                             │
+│   ┌─────────────────────────────────────────────────────────────────────┐   │
+│   │ Reviewer mindset: "Feature is BROKEN. I must prove it."             │   │
+│   │                                                                     │   │
+│   │ 1. Load verification/{session_id}/verification.md                   │   │
+│   │ 2. For each screenshot: What's missing? What's wrong?               │   │
+│   │ 3. Execute adversarial attacks (empty input, boundaries, etc.)      │   │
+│   │ 4. Document each attack: attempted / result / evidence              │   │
+│   └─────────────────────────────────────────────────────────────────────┘   │
+│                                                                             │
+│   PHASE 2: BEHAVIORAL VERDICT                                               │
+│   ┌────────────────────────────────────────────────┐                        │
+│   │ Did ANY attack prove feature broken?           │                        │
+│   │ Did you observe ANY behavioral issue?          │                        │
+│   │                                                │                        │
+│   │   YES ──► REQUEST_CHANGES (skip code review)   │                        │
+│   │   NO  ──► Proceed to code review               │                        │
+│   └────────────────────────────────────────────────┘                        │
+│                                                                             │
+│   PHASE 3: CODE REVIEW (only if behavioral verification passed)             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Zero-Tolerance Rule
+
+**ANY observed behavioral issue = AUTOMATIC REJECTION.**
+
+Invalid rationalizations (NEVER acceptable):
+
+| Invalid Thought | Reality |
+|-----------------|---------|
+| "Backend works, frontend is separate" | If UI is wrong, feature is broken. REJECT. |
+| "Tests pass" | Tests can be incomplete. Visual evidence overrides. |
+| "Code change is correct" | Correct code + wrong behavior = broken. REJECT. |
+| "This is a different bug" | If seen during verification, it blocks approval. |
+| "It's just an edge case" | Edge cases are bugs. REJECT. |
+
+### Verification Folder Structure
+
+```
+{AGENT_STATE_DIR}/
+├── verification/
+│   └── {session_id}/
+│       ├── verification_input.json   # Subagent input (features, URLs)
+│       ├── verification.md           # Verification report
+│       ├── screenshots/
+│       │   ├── 001-initial-state.png
+│       │   ├── 002-action-taken.png
+│       │   └── ...
+│       └── test_evidence/
+│           └── test_output.txt
+└── ...
+```
+
+### Scripts
+
+| Script | Purpose |
+|--------|---------|
+| `scripts/verification.py prepare` | Create verification input for subagent |
+| `scripts/verification.py status` | Check verification status |
+| `scripts/verification.py list` | List all verification reports |
+| `scripts/verification.py report` | Generate report template for manual completion |
+
+### Prompts
+
+| Prompt | Purpose |
+|--------|---------|
+| `prompts/verification_subagent_prompt.md` | Instructions for verification subagent |
+| `prompts/adversarial_attack_checklist.md` | Mandatory attacks for reviewer |
+
+---
+
 ## File Reference
 
 ### Orchestrator Files
@@ -598,6 +715,7 @@ Enforced via:
 | `prompts.py` | Prompt template loading |
 | `security.py` | Security settings generation |
 | `progress.py` | Progress tracking utilities |
+| `scripts/verification.py` | Verification artifact management |
 
 ### Prompt Files
 
@@ -608,6 +726,8 @@ Enforced via:
 | `prompts/reviewer_prompt.md` | REVIEW |
 | `prompts/fix_prompt.md` | FIX |
 | `prompts/architecture_reviewer_prompt.md` | ARCHITECTURE |
+| `prompts/verification_subagent_prompt.md` | Verification subagent |
+| `prompts/adversarial_attack_checklist.md` | Reviewer attack checklist |
 | `prompts/schemas.md` | JSON schema documentation |
 | `prompts/review_checklist.md` | Code review criteria |
 

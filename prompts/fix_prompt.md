@@ -251,7 +251,52 @@ Use Playwright MCP tools to verify fixes work:
 
 ---
 
-## STEP 7: DO NOT MERGE
+## STEP 7: SPAWN VERIFICATION SUBAGENT (MANDATORY)
+
+**You MUST NOT verify your own fixes alone.** A fresh-context subagent will provide independent verification.
+
+### 7.1 Prepare Verification Request
+
+```bash
+# Get next session ID
+SESSION_ID=$(python3 scripts/progress.py next-session-id)
+FEATURE_ID=$(python3 scripts/progress.py get-status --field current_feature)
+
+# Prepare verification input
+python3 scripts/verification.py prepare \
+  --session-id $SESSION_ID \
+  --feature-ids "$FEATURE_ID" \
+  --agent-type FIX
+```
+
+### 7.2 Launch Verification Subagent
+
+Use the Task tool to spawn the verification subagent:
+
+```
+Task tool:
+  subagent_type: "verification"
+  prompt: "Verify fixes for feature $FEATURE_ID in session $SESSION_ID.
+           This is a FIX verification - verify the issues were resolved and no regressions introduced.
+           Read verification input from {{AGENT_STATE_DIR}}/verification/$SESSION_ID/verification_input.json.
+           Follow prompts/verification_subagent_prompt.md."
+```
+
+### 7.3 Handle Verification Result
+
+| Result | Action |
+|--------|--------|
+| `VERIFIED` | Proceed to Step 8 (Do Not Merge) |
+| `NOT_VERIFIED` | Fix identified issues, re-run Step 7 |
+| `INCOMPLETE` | Complete verification manually using `python3 scripts/verification.py report --session-id $SESSION_ID` |
+
+**Max attempts:** 3 subagent runs. After 3 `NOT_VERIFIED` results, document the issue and proceed.
+
+⛔ **DO NOT proceed to READY_FOR_REVIEW without VERIFIED status from the subagent or documented manual verification.**
+
+---
+
+## STEP 8: DO NOT MERGE
 
 **CRITICAL:** You MUST NOT:
 - Merge to main (only REVIEW does this)
@@ -266,7 +311,7 @@ git rev-parse --short HEAD
 
 ---
 
-## STEP 8: RECORD FIX (USE SCRIPT - MANDATORY)
+## STEP 9: RECORD FIX (USE SCRIPT - MANDATORY)
 
 **Create issues_fixed JSON file:**
 
@@ -313,7 +358,7 @@ python3 scripts/reviews.py add-fix \
 
 ---
 
-## STEP 9: WRITE PROGRESS SUMMARY (MANDATORY)
+## STEP 10: WRITE PROGRESS SUMMARY (MANDATORY)
 
 **Before recording the session, create a progress summary file:**
 
@@ -354,7 +399,7 @@ EOF
 
 ---
 
-## STEP 10: RECORD SESSION (USE SCRIPT - MANDATORY)
+## STEP 11: RECORD SESSION (USE SCRIPT - MANDATORY)
 
 ```bash
 HEAD_COMMIT=$(git rev-parse --short HEAD)

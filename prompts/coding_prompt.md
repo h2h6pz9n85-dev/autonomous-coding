@@ -401,9 +401,55 @@ Before claiming READY_FOR_REVIEW, verify:
 
 ---
 
-## STEP 9: COMMIT YOUR PROGRESS
+## STEP 9: SPAWN VERIFICATION SUBAGENT (MANDATORY)
 
-Make a descriptive git commit:
+**You MUST NOT verify your own work alone.** A fresh-context subagent will provide independent verification.
+
+### 9.1 Prepare Verification Request
+
+```bash
+# Get next session ID
+SESSION_ID=$(python3 scripts/progress.py next-session-id)
+
+# Comma-separated feature IDs you implemented
+FEATURE_IDS="<F001,F002,...>"
+
+# Prepare verification input
+python3 scripts/verification.py prepare \
+  --session-id $SESSION_ID \
+  --feature-ids "$FEATURE_IDS" \
+  --agent-type IMPLEMENT
+```
+
+### 9.2 Launch Verification Subagent
+
+Use the Task tool to spawn the verification subagent:
+
+```
+Task tool:
+  subagent_type: "verification"
+  prompt: "Verify features $FEATURE_IDS for session $SESSION_ID.
+           Read verification input from {{AGENT_STATE_DIR}}/verification/$SESSION_ID/verification_input.json.
+           Follow prompts/verification_subagent_prompt.md."
+```
+
+### 9.3 Handle Verification Result
+
+| Result | Action |
+|--------|--------|
+| `VERIFIED` | Proceed to Step 10 (Commit) |
+| `NOT_VERIFIED` | Fix identified issues, re-run Step 9 |
+| `INCOMPLETE` | Complete verification manually using `python3 scripts/verification.py report --session-id $SESSION_ID` |
+
+**Max attempts:** 3 subagent runs. After 3 `NOT_VERIFIED` results, you must either fix the issues or document why verification cannot pass.
+
+⛔ **DO NOT proceed to READY_FOR_REVIEW without VERIFIED status from the subagent or documented manual verification.**
+
+---
+
+## STEP 10: COMMIT YOUR PROGRESS
+
+Make a descriptive git commit (include verification evidence):
 
 ```bash
 git add .
@@ -424,7 +470,7 @@ Feature: <feature-id>
 
 ---
 
-## STEP 10: WRITE PROGRESS SUMMARY (MANDATORY)
+## STEP 11: WRITE PROGRESS SUMMARY (MANDATORY)
 
 **Before recording the session, create a progress summary file:**
 
@@ -459,7 +505,7 @@ EOF
 
 ---
 
-## STEP 11: RECORD SESSION (USE SCRIPT - MANDATORY)
+## STEP 12: RECORD SESSION (USE SCRIPT - MANDATORY)
 
 **You MUST use the progress script to record your session:**
 
@@ -493,12 +539,12 @@ git commit -m "Record IMPLEMENT session for <feature_id>"
 
 ---
 
-## STEP 12: END SESSION
+## STEP 13: END SESSION
 
 Before context fills up:
 
 1. Commit all working code
-2. Record session via progress script (Step 9)
+2. Record session via progress script (Step 12)
 3. Ensure no uncommitted changes
 4. Leave app in working state (no broken features)
 5. Leave the branch ready for review - do NOT merge to main

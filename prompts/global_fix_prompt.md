@@ -79,7 +79,52 @@ npx playwright test
 
 ---
 
-## STEP 5: UPDATE ISSUE TRACKER
+## STEP 5: SPAWN VERIFICATION SUBAGENT (MANDATORY)
+
+**You MUST NOT verify your own fixes alone.** A fresh-context subagent will provide independent verification.
+
+### 5.1 Prepare Verification Request
+
+```bash
+# Get next session ID
+SESSION_ID=$(python3 scripts/progress.py next-session-id)
+
+# For global fixes, use a placeholder feature ID or list the issues
+ISSUE_IDS="ISSUE-001,ISSUE-002"  # Comma-separated issue IDs you fixed
+
+# Prepare verification input
+python3 scripts/verification.py prepare \
+  --session-id $SESSION_ID \
+  --feature-ids "$ISSUE_IDS" \
+  --agent-type GLOBAL_FIX
+```
+
+### 5.2 Launch Verification Subagent
+
+Use the Task tool to spawn the verification subagent:
+
+```
+Task tool:
+  subagent_type: "verification"
+  prompt: "Verify global fixes for issues $ISSUE_IDS in session $SESSION_ID.
+           This is a GLOBAL_FIX verification - verify tech debt issues were resolved.
+           Read verification input from {{AGENT_STATE_DIR}}/verification/$SESSION_ID/verification_input.json.
+           Follow prompts/verification_subagent_prompt.md."
+```
+
+### 5.3 Handle Verification Result
+
+| Result | Action |
+|--------|--------|
+| `VERIFIED` | Proceed to Step 6 |
+| `NOT_VERIFIED` | Fix identified issues, re-run Step 5 |
+| `INCOMPLETE` | Complete verification manually |
+
+⛔ **DO NOT proceed without VERIFIED status from the subagent or documented manual verification.**
+
+---
+
+## STEP 6: UPDATE ISSUE TRACKER
 
 **You must update `issues.json` for every resolved issue.**
 
@@ -112,7 +157,7 @@ with open('issues.json', 'r+') as f:
 
 ---
 
-## STEP 6: WRITE PROGRESS SUMMARY (MANDATORY)
+## STEP 7: WRITE PROGRESS SUMMARY (MANDATORY)
 
 **Before recording the session, create a progress summary file:**
 
@@ -149,7 +194,7 @@ EOF
 
 ---
 
-## STEP 7: RECORD SESSION
+## STEP 8: RECORD SESSION
 
 **You MUST record your activity in `progress.json`.**
 
