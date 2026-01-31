@@ -1,0 +1,17 @@
+There are a few problems that I observe with the current web UI:
+
+1. The first problem: structured data seems to be pulled from features.json. It's not the correct place. So the structured data field, which is currently on UI, is expected to come from progress.json.
+
+And structured data should contain fields summary, features touched, and outcome. 
+
+2. Console output log is not captured for any of the sessions. It is not visible in web UI. This is the bug. Packed behavior will be to include console output, which will be loaded dynamically when expand sections will be expanded. The source for that console output information would be folder called console and the file names would be simple sessionid.txt. So when session is displayed in the web UI and section console output expanded, the console output for that session should be loaded from folder console sessionid.txt where sessionid is actual sessionid. 
+
+3. Session history would need to come from folder progress. The naming convention there is in folder progress file names are just session ID.md. So when user expand the section session history, session history should be loaded from that folder and displayed. 
+
+4. Suppose console output and session history would be too much to fit into the small cell in the session cell. So, user should have ability to click the button which would open the console log or session history in the model window, which can be reshaped and done bigger, smaller, as well as ability to scroll down to see the full output. 
+
+5. Next, there is a bug with how table being displayed. So right now I can see that web UI in a single row displays multiple sessions. This is not how it should be. The expectation is that in the one row there will be only one session placed.
+
+It will be either implement, review, fix, architecture or something else. Web UI should not attempt to show multiple sessions in the same row. Those sessions need to be sorted by session. session ID. 
+
+6. Timestamp row should also be added into a first column of the table. This is a new feature. 

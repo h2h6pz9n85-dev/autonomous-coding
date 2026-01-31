@@ -2,6 +2,30 @@
 
 You address issues found during code review or architecture review. This is a fresh context window.
 
+---
+
+## SKILL TRIGGERS
+
+**Invoke these skills when conditions match:**
+
+| Condition | Skill | Why |
+|-----------|-------|-----|
+| Before implementing ANY review feedback | `receiving-code-review` | Requires technical verification before blind implementation; prevents performative agreement |
+| Review feedback involves UI changes | `frontend-design` | Ensures fixes maintain visual quality |
+| Review requests additional tests | `test-driven-development` | Write failing test FIRST, then implement fix |
+| Issue seems unclear or questionable | `receiving-code-review` | Skill requires you to verify feedback is technically sound before implementing |
+
+**How to invoke:** Use the `Skill` tool with the skill name before proceeding with that phase.
+
+⚠️ **MANDATORY:** You MUST invoke `receiving-code-review` after Step 3 (Parse Issues) and before Step 4 (Fix Issues). This ensures you:
+1. Understand each issue technically (not just accept it)
+2. Verify the suggested fix is correct (reviewers can be wrong)
+3. Implement with rigor, not performative compliance
+
+**CRITICAL MINDSET:** Review feedback is input, not commands. Verify technically before implementing. If feedback is incorrect, document why and propose the correct fix instead.
+
+---
+
 ## PRECONDITIONS
 
 - You are triggered when REVIEW or ARCHITECTURE verdict was `REQUEST_CHANGES` or `PASS_WITH_COMMENTS`
@@ -116,7 +140,7 @@ git rev-parse --short HEAD
 
 ---
 
-## STEP 3: PARSE ISSUES FROM REVIEW
+## STEP 3: PARSE AND EVALUATE ISSUES FROM REVIEW
 
 ```bash
 python3 scripts/reviews.py show-issues
@@ -127,6 +151,54 @@ Priority order:
 2. **MAJOR** — must fix
 3. **MINOR** — fix after critical/major resolved
 4. **SUGGESTION** — defer unless trivial
+
+---
+
+### RECEIVING FEEDBACK: TECHNICAL RIGOR, NOT BLIND COMPLIANCE
+
+**You are a skilled engineer receiving feedback, not a subordinate following orders.**
+
+For each issue, apply this evaluation:
+
+#### 3.1 Understand Before Acting
+
+- [ ] Do I understand the **technical problem** being raised?
+- [ ] Do I understand **why** the reviewer considers this an issue?
+- [ ] Is the reviewer's suggested fix **technically correct**?
+
+If NO to any: investigate the issue yourself before implementing.
+
+#### 3.2 Verify Reviewer Claims
+
+Reviewers can be wrong. Before implementing a suggested fix:
+
+1. **Reproduce the issue** — Can you observe the problem the reviewer describes?
+2. **Verify the diagnosis** — Is their root cause analysis correct?
+3. **Evaluate the solution** — Will their suggested fix actually work?
+
+```bash
+# Example: Reviewer says "this function can throw uncaught exception"
+# Verify: trace the code path, check if exception handling exists
+```
+
+#### 3.3 Disagree Constructively (When Appropriate)
+
+If you determine the reviewer is incorrect:
+
+- **Document your analysis** in the fix record
+- **Provide evidence** (code paths, test results, specifications)
+- **Propose alternative** if you have a better solution
+- **Defer to REVIEW** — they make the final call, but with your input
+
+⛔ **DO NOT:**
+- Blindly implement suggestions you don't understand
+- Make changes that introduce new bugs to satisfy feedback
+- Agree performatively ("fixed as requested") without verification
+
+✅ **DO:**
+- Fix issues you verify are real problems
+- Document when you disagree and why
+- Ensure your fixes actually solve the stated problem
 
 ---
 
@@ -149,12 +221,11 @@ git commit -m "Fix <SEVERITY>: <issue_id> - <description>
 "
 ```
 
-**After each fix, verify no regressions:**
-```bash
-pytest tests/ -v
-npm test
-npx playwright test
-```
+**REGRESSION GATE - After each fix, ALL tests must pass:**
+
+Run the project's test command(s) - check README, CLAUDE.md, or build files for the correct commands.
+
+Any failure → STOP → Fix the regression → Re-run ALL → Continue only when green.
 
 ---
 
@@ -242,7 +313,48 @@ python3 scripts/reviews.py add-fix \
 
 ---
 
-## STEP 9: RECORD SESSION (USE SCRIPT - MANDATORY)
+## STEP 9: WRITE PROGRESS SUMMARY (MANDATORY)
+
+**Before recording the session, create a progress summary file:**
+
+```bash
+# Get the next session ID
+SESSION_ID=$(python3 scripts/progress.py next-session-id)
+
+# Create progress directory if it doesn't exist
+mkdir -p "{{AGENT_STATE_DIR}}/progress"
+
+# Write the progress summary
+cat > "{{AGENT_STATE_DIR}}/progress/${SESSION_ID}.md" << 'EOF'
+# Session Summary: FIX
+
+## Review Addressed
+- Review ID: <review_id>
+- Feature: <feature_id>
+
+## Issues Fixed
+- <issue_id>: <brief description of fix>
+
+## Issues Deferred
+- <issue_id>: <reason for deferral> (if any)
+
+## Tests Added
+- <test names added>
+
+## Verification
+- <browser verification status>
+- <test results>
+
+## Notes
+- <any relevant observations or context for future sessions>
+EOF
+```
+
+**Edit the file to reflect your actual work before proceeding.**
+
+---
+
+## STEP 10: RECORD SESSION (USE SCRIPT - MANDATORY)
 
 ```bash
 HEAD_COMMIT=$(git rev-parse --short HEAD)
@@ -259,7 +371,7 @@ python3 scripts/progress.py add-session \
   --next-phase REVIEW
 
 # Commit tracking files
-git add progress.json reviews.json
+git add "{{AGENT_STATE_DIR}}/progress.json" "{{AGENT_STATE_DIR}}/reviews.json" "{{AGENT_STATE_DIR}}/progress/"
 git commit -m "Record FIX session for re-verification"
 ```
 

@@ -297,6 +297,22 @@ def cmd_show_issues(args) -> None:
                 print()
 
 
+def cmd_next_review_id(args) -> None:
+    """Get the next review ID."""
+    data = load_reviews(args.file)
+    if data is None:
+        print("1")  # First review
+        return
+
+    reviews = data.get("reviews", [])
+    if not reviews:
+        print("1")
+        return
+
+    max_id = max(r.get("review_id", 0) for r in reviews)
+    print(max_id + 1)
+
+
 def cmd_list(args) -> None:
     """List all reviews and fixes."""
     data = load_reviews(args.file)
@@ -351,8 +367,14 @@ def main():
     parser.add_argument(
         "--file", "-f",
         type=Path,
-        default=Path("reviews.json"),
-        help="Path to reviews.json"
+        default=None,
+        help="Path to reviews.json (overrides --agent-state-dir)"
+    )
+    parser.add_argument(
+        "--agent-state-dir", "-d",
+        type=Path,
+        default=None,
+        help="Agent state directory (reviews.json will be in this dir)"
     )
 
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -403,11 +425,25 @@ def main():
     # list
     subparsers.add_parser("list", help="List all reviews and fixes")
 
+    # next-review-id
+    subparsers.add_parser("next-review-id", help="Get next available review ID")
+
     # mark-merged
     mark_parser = subparsers.add_parser("mark-merged", help="Mark fix as merged")
     mark_parser.add_argument("fix_id", type=int, help="Fix ID to mark as merged")
 
     args = parser.parse_args()
+
+    # Resolve file path: --file > --agent-state-dir > AGENT_STATE_DIR env > current dir
+    import os
+    if args.file is not None:
+        pass  # Use explicit file path
+    elif args.agent_state_dir is not None:
+        args.file = args.agent_state_dir / "reviews.json"
+    elif os.environ.get("AGENT_STATE_DIR"):
+        args.file = Path(os.environ["AGENT_STATE_DIR"]) / "reviews.json"
+    else:
+        args.file = Path("reviews.json")  # Default to current directory
 
     commands = {
         "init": cmd_init,
@@ -418,6 +454,7 @@ def main():
         "get-fix-count": cmd_get_fix_count,
         "show-issues": cmd_show_issues,
         "list": cmd_list,
+        "next-review-id": cmd_next_review_id,
         "mark-merged": cmd_mark_merged,
     }
 

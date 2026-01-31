@@ -1,0 +1,14 @@
+Bugs: 
+1. Sessions are not ordred descending by sessions ID
+2. Some rows are empty 
+3. Structured data must be expanded by default
+4. Structured data shows icon "expanded" but it's collapsed
+
+
+Features:
+1. When scrolling headers must be sticky and always remainining on top 
+2. Remove text expands "Session history" and "Console output". Replace with icons in the botton of cell. Current buttons "Discard" and "Summary" move to down of the cell as well
+3. Timestamp column must be sorted descending same as session ID
+4. Timestamp column must be collapsible same as rest of columns. When collapsed it should show date in vertical orientation. Timestamp column should be collaplsed by default.
+5. Styling of the UI must be improved and have modern fluid macos native look and feel. 
+6. Add navigate functionality to the top of the page to navigate between sessions. Figure out how make it most convenient. 

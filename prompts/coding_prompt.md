@@ -4,6 +4,41 @@ You are continuing work on a long-running autonomous development task.
 This is a FRESH context window - you have no memory of previous sessions.
 Your changes will be reviewed by a senior engineer in the next session.
 
+---
+
+## SKILL TRIGGERS
+
+**Invoke these skills when conditions match:**
+
+| Condition | Skill | Why |
+|-----------|-------|-----|
+| Feature has UI components | `frontend-design` | Creates distinctive, production-grade interfaces; avoids generic AI aesthetics |
+| Writing any test | `test-driven-development` | Enforces RED → GREEN → REFACTOR; write failing test FIRST |
+| Feature requirements are unclear | `brainstorming` | Explores requirements and design BEFORE implementation |
+| Unexpected test failure during implementation | `systematic-debugging` | Prevents guess-and-check debugging loops |
+
+**How to invoke:** Use the `Skill` tool with the skill name before proceeding with that phase.
+
+**SKILL SEQUENCE FOR FEATURES:**
+
+1. **Before Step 5 (Implement):**
+   - If feature touches UI → invoke `frontend-design`
+   - If requirements seem ambiguous → invoke `brainstorming`
+
+2. **During Step 5 (Implement) - For each component:**
+   - Write failing test FIRST (invoke `test-driven-development` if unsure)
+   - Then write minimal code to pass
+   - Then refactor
+
+3. **If tests fail unexpectedly:**
+   - STOP guessing
+   - Invoke `systematic-debugging`
+   - Follow the hypothesis-verification loop
+
+⚠️ **TDD IS NOT OPTIONAL:** You must write tests BEFORE implementation code. The review agent will reject "tests written after the fact" patterns.
+
+---
+
 ## SCOPE CONSTRAINT
 
 You are building the **{{PROJECT_NAME}}** project ONLY. You may ONLY modify files in:
@@ -86,8 +121,8 @@ python3 scripts/progress.py get-status
 # 2. Get feature candidates (shows up to 15 pending features)
 python3 scripts/features.py next-candidates
 
-# 3. Read the project specification
-cat app_spec.txt
+# 3. Read all project specifications
+for spec in *spec*.txt *spec*.md; do [ -f "$spec" ] && echo -e "\n=== $spec ===" && cat "$spec"; done
 
 # 4. Check for architecture review recommendations
 ls ARCHITECTURE_REVIEW_*.md 2>/dev/null | tail -1 | xargs cat 2>/dev/null || echo "No architecture review yet"
@@ -113,36 +148,35 @@ The script returns the first feature with `passes: false` in priority order.
 
 ## STEP 2: START SERVERS (IF NOT RUNNING)
 
-If `init.sh` exists, run it:
+**Use the startup script to start servers:**
 
 ```bash
-chmod +x init.sh
-./init.sh
+chmod +x start.sh
+./start.sh
 ```
 
-Note the URLs printed by init.sh (typically localhost:3000 for frontend, localhost:8000 for backend).
+The script is idempotent - safe to run multiple times. It checks if servers are already running.
 
-**Verify servers are running before proceeding:**
+**Check server status anytime:**
+```bash
+./status.sh
+```
+
+**If start.sh doesn't exist or fails, check status and start manually:**
 
 ```bash
-# Wait for servers to start, then verify
-sleep 5
+# Check what's running
+./status.sh
+
+# If you need to restart, stop first then start
+./stop.sh
+./start.sh
+```
+
+**Verify servers are healthy:**
+```bash
 curl -s http://localhost:3000 > /dev/null && echo "Frontend OK" || echo "Frontend NOT running"
 curl -s http://localhost:8000/health > /dev/null && echo "Backend OK" || echo "Backend NOT running"
-```
-
-Otherwise, start servers manually:
-
-```bash
-# Backend
-cd {{PROJECT_PATH}}/backend
-pip install -r requirements.txt
-uvicorn app.main:app --reload --port 8000 &
-
-# Frontend
-cd {{PROJECT_PATH}}/frontend
-npm install
-npm run dev &
 ```
 
 ---
@@ -183,33 +217,109 @@ git checkout -b feature/<feature-name>
 
 ## STEP 5: IMPLEMENT THE FEATURE
 
-Implement the chosen feature thoroughly:
+### TEST-DRIVEN DEVELOPMENT (TDD) APPROACH
 
-1. Write the implementation code (frontend and/or backend as needed)
-2. Write tests for the feature (both positive AND negative cases)
-3. Run automated tests (see Step 6)
-4. Test manually using browser automation (see Step 7)
-5. Fix any issues discovered
-6. Ensure the feature works end-to-end through the UI
+**Write tests BEFORE implementation. Red → Green → Refactor.**
+
+#### 5.1 Write Failing Tests First
+
+Before writing any implementation code:
+
+1. **Analyze the feature requirements** — What behaviors need to exist?
+2. **Write test cases** that will verify those behaviors:
+   - Happy path (expected inputs → expected outputs)
+   - Edge cases (empty, null, boundary values)
+   - Error cases (invalid inputs, failure conditions)
+
+```bash
+# Run tests - they SHOULD fail (Red phase)
+pytest tests/test_<feature>.py -v
+```
+
+⛔ If tests pass before you write implementation, your tests are wrong.
+
+#### 5.2 Implement Minimal Code to Pass
+
+Write the simplest code that makes tests pass:
+
+- Don't add functionality not required by tests
+- Don't optimize prematurely
+- Focus on making tests green
+
+```bash
+# Run tests - they should now pass (Green phase)
+pytest tests/test_<feature>.py -v
+```
+
+#### 5.3 Refactor (If Needed)
+
+With green tests as safety net:
+
+- Clean up code structure
+- Remove duplication
+- Improve naming
+- Re-run tests after each refactor
 
 ---
 
-## STEP 6: RUN AUTOMATED TESTS
+### FRONTEND IMPLEMENTATION: DESIGN QUALITY STANDARDS
 
-Run all tests to ensure no regressions:
+**If this feature includes UI components, apply these principles:**
+
+#### Visual Design Standards
+
+- **Consistent spacing** — Use existing spacing tokens/variables
+- **Typography hierarchy** — Headings, body, captions should be visually distinct
+- **Color usage** — Follow existing palette, ensure sufficient contrast (WCAG AA)
+- **Interactive states** — Hover, focus, active, disabled states for all interactive elements
+- **Responsive behavior** — Test at mobile (375px), tablet (768px), desktop (1024px+)
+
+#### Component Quality
+
+- **Loading states** — Show skeleton/spinner during async operations
+- **Empty states** — Meaningful message when no data exists
+- **Error states** — Clear error messages with recovery actions
+- **Accessibility** — Semantic HTML, ARIA labels, keyboard navigation
+
+#### Before Committing UI Changes
 
 ```bash
-# Backend tests (Python)
-pytest tests/ -v
-
-# Frontend tests (if applicable)
-npm test
-
-# E2E tests (if available)
-npx playwright test
+# Take screenshots at key breakpoints
+# Use Playwright to verify visual appearance
 ```
 
-Fix any failures before proceeding to browser verification.
+⛔ **DO NOT** commit UI features that:
+- Look broken at any standard breakpoint
+- Have missing interactive states
+- Lack loading/error handling
+
+---
+
+### Implementation Checklist
+
+Implement the chosen feature thoroughly:
+
+1. Write failing tests first (TDD Red phase)
+2. Write implementation code (frontend and/or backend as needed)
+3. Make tests pass (TDD Green phase)
+4. Refactor if needed (TDD Refactor phase)
+5. Add additional test cases (edge cases, error cases)
+6. Run automated tests (see Step 6)
+7. Test manually using browser automation (see Step 7)
+8. Fix any issues discovered
+9. Ensure the feature works end-to-end through the UI
+
+---
+
+## STEP 6: RUN AUTOMATED TESTS - REGRESSION GATE
+
+**ALL tests must pass. Not "feature tests". ALL tests.**
+
+Run the project's test command(s) - check README, CLAUDE.md, or build files for the correct commands.
+
+Any failure → STOP → Fix → Re-run ALL → Proceed only when green.
+
+Do not proceed with failing tests. Do not defer. Do not say "I'll fix later."
 
 ---
 
@@ -231,7 +341,7 @@ Test like a human user with mouse and keyboard.
 - Take screenshots to verify visual appearance
 - Check for console errors using `browser_console_messages`
 - Verify complete user workflows end-to-end
-- Navigate to the URLs from init.sh output
+- Navigate to the URLs shown by start.sh output
 
 **DON'T:**
 
@@ -241,7 +351,57 @@ Test like a human user with mouse and keyboard.
 
 ---
 
-## STEP 8: COMMIT YOUR PROGRESS
+## STEP 8: VERIFICATION BEFORE COMPLETION
+
+**EVIDENCE BEFORE ASSERTIONS — You cannot claim "done" without proof.**
+
+Before committing, complete this verification checklist:
+
+### 8.1 Test Evidence (MANDATORY)
+
+**Run ALL tests for this project — backend, frontend, and E2E.**
+
+Find test commands in: README, CLAUDE.md, package.json, Makefile, or build configuration files.
+
+Verify the output:
+- [ ] All backend tests pass (zero failures)
+- [ ] All frontend tests pass (zero failures)
+- [ ] All E2E tests pass (zero failures)
+- [ ] Exit code is 0 for each test suite
+
+⛔ If ANY test fails, you are NOT done. Fix before proceeding.
+
+### 8.2 UI Verification Evidence (MANDATORY for UI features)
+
+Use Playwright MCP tools to capture proof:
+
+```
+mcp__plugin_playwright_playwright__browser_navigate → feature URL
+mcp__plugin_playwright_playwright__browser_take_screenshot → capture proof
+mcp__plugin_playwright_playwright__browser_console_messages → check for errors
+```
+
+You MUST have:
+- [ ] Screenshot showing feature works in browser
+- [ ] Console checked for errors (no red errors in output)
+- [ ] User workflow tested end-to-end through clicks
+
+### 8.3 Pre-Commit Checklist
+
+Before claiming READY_FOR_REVIEW, verify:
+
+- [ ] All tests pass (you saw the green output)
+- [ ] Feature works in browser (you have screenshot)
+- [ ] No console errors (you checked)
+- [ ] No TODO comments left in code
+- [ ] No console.log/print debugging statements left
+- [ ] Error handling exists for failure cases
+
+⛔ **DO NOT record session as READY_FOR_REVIEW if any checkbox is unchecked.**
+
+---
+
+## STEP 9: COMMIT YOUR PROGRESS
 
 Make a descriptive git commit:
 
@@ -264,7 +424,42 @@ Feature: <feature-id>
 
 ---
 
-## STEP 9: RECORD SESSION (USE SCRIPT - MANDATORY)
+## STEP 10: WRITE PROGRESS SUMMARY (MANDATORY)
+
+**Before recording the session, create a progress summary file:**
+
+```bash
+# Get the next session ID
+SESSION_ID=$(python3 scripts/progress.py next-session-id)
+
+# Create progress directory if it doesn't exist
+mkdir -p "{{AGENT_STATE_DIR}}/progress"
+
+# Write the progress summary
+cat > "{{AGENT_STATE_DIR}}/progress/${SESSION_ID}.md" << 'EOF'
+# Session Summary: IMPLEMENT
+
+## Features Worked On
+- <feature_id>: <feature_name>
+
+## Changes Made
+- <brief description of implementation>
+- <key files modified>
+
+## Testing
+- <tests added/run>
+- <browser verification status>
+
+## Notes
+- <any relevant observations or context for future sessions>
+EOF
+```
+
+**Edit the file to reflect your actual work before proceeding.**
+
+---
+
+## STEP 11: RECORD SESSION (USE SCRIPT - MANDATORY)
 
 **You MUST use the progress script to record your session:**
 
@@ -289,16 +484,16 @@ python3 scripts/progress.py add-session \
   --commits "$HEAD_COMMIT:<commit message>"
 ```
 
-**Commit the updated progress.json:**
+**Commit the updated progress.json and summary:**
 
 ```bash
-git add progress.json
+git add "{{AGENT_STATE_DIR}}/progress.json" "{{AGENT_STATE_DIR}}/progress/"
 git commit -m "Record IMPLEMENT session for <feature_id>"
 ```
 
 ---
 
-## STEP 10: END SESSION
+## STEP 12: END SESSION
 
 Before context fills up:
 

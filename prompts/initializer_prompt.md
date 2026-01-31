@@ -40,20 +40,20 @@ As INITIALIZER, you create these files ONCE. All future access MUST use scripts.
 
 ## STEP 1: READ THE SPECIFICATION (MANDATORY)
 
-Start by reading `app_spec.txt` in your working directory:
+Start by reading all project specification files in your working directory:
 
 ```bash
-cat app_spec.txt
+for spec in *spec*.txt *spec*.md; do [ -f "$spec" ] && echo -e "\n=== $spec ===" && cat "$spec"; done
 ```
 
-This file contains the complete specification for what you need to build.
-Read it carefully before proceeding - understanding the spec is critical.
+These files contain the complete specification for what you need to build.
+Read them carefully before proceeding - understanding the specs is critical.
 
 ---
 
 ## STEP 2: CREATE FEATURE LIST (CRITICAL!)
 
-Based on `app_spec.txt`, create a file called `feature_list.json` with {{FEATURE_COUNT}} detailed
+Based on the project specifications, create a file called `feature_list.json` with {{FEATURE_COUNT}} detailed
 end-to-end test cases. This file is the single source of truth for what
 needs to be built.
 
@@ -132,40 +132,161 @@ Organize features so that:
 
 ---
 
-## STEP 4: CREATE INIT SCRIPT
+## STEP 4: CREATE SMART STARTUP SCRIPTS
 
-Create a script called `init.sh` that future agents can use to quickly
-set up and run the development environment:
+Create **idempotent** scripts that future agents can run safely multiple times.
+These scripts must be technology-aware based on your project's stack.
+
+### 4.1: Create `start.sh` (REQUIRED)
+
+This script must:
+1. **Check if services are already running** before starting them
+2. **Only start what's not running** (idempotent)
+3. **Wait for services to be healthy** before returning
+4. **Print clear status** of what's running
 
 ```bash
 #!/bin/bash
+# start.sh - Idempotent server startup script
+# Safe to run multiple times - only starts what's not already running
+
 set -e
 
-echo "Setting up development environment..."
+# Configuration - CUSTOMIZE THESE FOR YOUR PROJECT
+BACKEND_PORT=8000
+FRONTEND_PORT=3000  # or 5173 for Vite
 
-# Install frontend dependencies
-cd {{PROJECT_PATH}}/frontend
-npm install
+# Colors for output
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m' # No Color
 
-# Install backend dependencies
-cd ../backend
-pip install -r requirements.txt
+check_port() {
+    lsof -i :$1 >/dev/null 2>&1
+}
 
-# Start backend server
-echo "Starting backend on http://localhost:8000..."
-uvicorn app.main:app --reload --port 8000 &
+wait_for_port() {
+    local port=$1
+    local max_attempts=30
+    local attempt=0
+    while ! check_port $port; do
+        attempt=$((attempt + 1))
+        if [ $attempt -ge $max_attempts ]; then
+            echo "Timeout waiting for port $port"
+            return 1
+        fi
+        sleep 1
+    done
+}
 
-# Start frontend dev server
-cd ../frontend
-echo "Starting frontend on http://localhost:3000..."
-npm run dev &
+echo "=========================================="
+echo "  Starting Development Servers"
+echo "=========================================="
+
+# --- BACKEND ---
+if check_port $BACKEND_PORT; then
+    echo -e "${GREEN}✓ Backend already running on port $BACKEND_PORT${NC}"
+else
+    echo -e "${YELLOW}Starting backend...${NC}"
+    # CUSTOMIZE: Add your backend start command here
+    # Example for Python/FastAPI:
+    # cd backend && source venv/bin/activate && python -m uvicorn main:app --reload --port $BACKEND_PORT &
+    # Example for Node.js:
+    # cd backend && npm start &
+
+    wait_for_port $BACKEND_PORT
+    echo -e "${GREEN}✓ Backend started on port $BACKEND_PORT${NC}"
+fi
+
+# --- FRONTEND ---
+if check_port $FRONTEND_PORT; then
+    echo -e "${GREEN}✓ Frontend already running on port $FRONTEND_PORT${NC}"
+else
+    echo -e "${YELLOW}Starting frontend...${NC}"
+    # CUSTOMIZE: Add your frontend start command here
+    # Example for Vite:
+    # cd frontend && npm run dev &
+    # Example for Next.js:
+    # cd frontend && npm run dev &
+
+    wait_for_port $FRONTEND_PORT
+    echo -e "${GREEN}✓ Frontend started on port $FRONTEND_PORT${NC}"
+fi
 
 echo ""
-echo "Development servers starting..."
-echo "  Frontend: http://localhost:3000"
-echo "  Backend:  http://localhost:8000"
-echo "  API Docs: http://localhost:8000/docs"
+echo "=========================================="
+echo "  All services running:"
+echo "    Frontend: http://localhost:$FRONTEND_PORT"
+echo "    Backend:  http://localhost:$BACKEND_PORT"
+echo "=========================================="
 ```
+
+### 4.2: Create `stop.sh` (REQUIRED)
+
+```bash
+#!/bin/bash
+# stop.sh - Stop all development servers
+
+BACKEND_PORT=8000
+FRONTEND_PORT=3000
+
+echo "Stopping development servers..."
+
+# Kill processes on backend port
+lsof -ti :$BACKEND_PORT | xargs kill -9 2>/dev/null && echo "✓ Backend stopped" || echo "Backend was not running"
+
+# Kill processes on frontend port
+lsof -ti :$FRONTEND_PORT | xargs kill -9 2>/dev/null && echo "✓ Frontend stopped" || echo "Frontend was not running"
+
+echo "All servers stopped."
+```
+
+### 4.3: Create `status.sh` (REQUIRED)
+
+```bash
+#!/bin/bash
+# status.sh - Check status of development servers
+
+BACKEND_PORT=8000
+FRONTEND_PORT=3000
+
+echo "Server Status:"
+echo "--------------"
+
+if lsof -i :$BACKEND_PORT >/dev/null 2>&1; then
+    echo "✓ Backend:  RUNNING (port $BACKEND_PORT)"
+else
+    echo "✗ Backend:  NOT RUNNING"
+fi
+
+if lsof -i :$FRONTEND_PORT >/dev/null 2>&1; then
+    echo "✓ Frontend: RUNNING (port $FRONTEND_PORT)"
+else
+    echo "✗ Frontend: NOT RUNNING"
+fi
+```
+
+### 4.4: Customize for Your Stack
+
+**You MUST customize the start commands in `start.sh` based on the project's technology stack:**
+
+| Stack | Backend Start Command | Frontend Start Command |
+|-------|----------------------|------------------------|
+| Python/FastAPI | `cd backend && source venv/bin/activate && uvicorn main:app --reload --port 8000 &` | - |
+| Python/Flask | `cd backend && source venv/bin/activate && flask run --port 8000 &` | - |
+| Node/Express | `cd backend && npm start &` | - |
+| Vite (React/Vue) | - | `cd frontend && npm run dev &` |
+| Next.js | - | `cd frontend && npm run dev &` |
+| Create React App | - | `cd frontend && npm start &` |
+
+**Make all scripts executable:**
+```bash
+chmod +x start.sh stop.sh status.sh
+```
+
+---
+
+**WHY THIS MATTERS:** Future agents will run `./start.sh` without thinking. If it's not idempotent, they'll waste context trying to debug "port already in use" errors or starting duplicate servers.
 
 ---
 
@@ -179,7 +300,7 @@ git add .
 git commit -m "Initial project setup
 
 - Created feature_list.json with {{FEATURE_COUNT}} features
-- Created init.sh for environment setup
+- Created startup scripts (start.sh, stop.sh, status.sh)
 - Project structure ready for implementation
 "
 ```
@@ -220,7 +341,7 @@ python3 scripts/progress.py init \
 ```bash
 python3 scripts/progress.py add-session \
   --agent-type INITIALIZER \
-  --summary "Created feature_list.json with {{FEATURE_COUNT}} features, initialized git repository, created init.sh" \
+  --summary "Created feature_list.json with {{FEATURE_COUNT}} features, initialized git repository, created startup scripts" \
   --outcome SUCCESS \
   --next-phase IMPLEMENT \
   --commits "$(git rev-parse --short HEAD):Initial project setup"
@@ -241,7 +362,7 @@ python3 scripts/reviews.py init
 ## STEP 9: COMMIT TRACKING FILES
 
 ```bash
-git add progress.json reviews.json
+git add "{{AGENT_STATE_DIR}}/progress.json" "{{AGENT_STATE_DIR}}/reviews.json"
 git commit -m "Initialize progress and review tracking"
 ```
 
@@ -255,7 +376,7 @@ The IMPLEMENT agent will handle feature implementation in the next session with 
 
 1. ✅ Read spec and plan features
 2. ✅ Create feature_list.json
-3. ✅ Create init.sh
+3. ✅ Create smart startup scripts (start.sh, stop.sh, status.sh)
 4. ✅ Initialize git
 5. ✅ Initialize progress.json and reviews.json via scripts
 6. ⛔ DO NOT start servers
@@ -313,7 +434,7 @@ Before your context fills up:
 
 1. Commit all work with descriptive messages
 2. Ensure feature_list.json is complete and saved
-3. Ensure init.sh is executable
+3. Ensure start.sh, stop.sh, status.sh are executable and customized for your stack
 4. Verify progress.json was initialized via script
 5. Leave the environment in a clean, working state
 

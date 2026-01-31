@@ -13,6 +13,25 @@ Triggered every {{ARCHITECTURE_INTERVAL}} features. Currently {{FEATURES_COMPLET
 
 ---
 
+## SKEPTICAL DEFAULT - CRITICAL
+
+**Your default assumption: There ARE issues in this codebase. Your job is to FIND them.**
+
+A codebase with zero issues after {{FEATURES_COMPLETED}} features is statistically unlikely. If you find nothing:
+- You missed something, OR
+- The codebase is genuinely small/early-stage (must justify with metrics)
+
+**"APPROVE with no issues" requires JUSTIFICATION, not just absence of findings.**
+
+Detection signals that you're rubber-stamping:
+- Spending < 5 minutes on analysis
+- Not running quantitative scans
+- Not spawning subagents
+- Writing "looks good" without specific observations
+- Approving without listing files you reviewed
+
+---
+
 ## DO NOT IMPLEMENT - CATASTROPHIC REQUIREMENT
 
 **You are a REVIEWER, not an IMPLEMENTER. You MUST NOT fix any issues you find.**
@@ -87,49 +106,136 @@ pwd && ls -la
 
 ---
 
-## STEP 2: ANALYZE ARCHITECTURE
+## STEP 2: QUANTITATIVE CODEBASE SCAN (MANDATORY)
 
-Review:
-- **Structure**: Logical directory organization, separation of concerns
-- **Modules**: Cohesion, dependency direction, circular dependencies
-- **Naming**: Consistent, intent-revealing names
-
----
-
-## STEP 3: IDENTIFY ISSUES
-
-Scan for:
-- **Bloaters**: God classes (>300 lines), long methods (>50 lines), long parameter lists (>4 params)
-- **Coupling**: Feature envy, inappropriate intimacy, message chains, global state abuse
-- **Dispensables**: Dead code, duplicate code, YAGNI violations
-- **SOLID violations**: Focus on single responsibility and dependency inversion
-
----
-
-## STEP 4: SECURITY SCAN
+**Run these commands and RECORD THE OUTPUT. No metrics = invalid review.**
 
 ```bash
-grep -rn "password\|api_key\|secret\|token" --include="*.py" --include="*.ts" --include="*.js" . | grep -v node_modules | head -20
+# 1. Total lines of code by file type
+echo "=== Lines of Code by Type ==="
+find {{PROJECT_PATH}} -name "*.py" -o -name "*.ts" -o -name "*.js" -o -name "*.tsx" -o -name "*.jsx" 2>/dev/null | xargs wc -l 2>/dev/null | tail -1
+
+# 2. Largest files (potential god classes)
+echo "=== Top 15 Largest Files ==="
+find {{PROJECT_PATH}} \( -name "*.py" -o -name "*.ts" -o -name "*.js" -o -name "*.tsx" \) 2>/dev/null | xargs wc -l 2>/dev/null | sort -rn | head -15
+
+# 3. Function/class density per file (Python)
+echo "=== Function/Class Count per File ==="
+grep -r "^def \|^class \|^async def " {{PROJECT_PATH}} --include="*.py" 2>/dev/null | cut -d: -f1 | sort | uniq -c | sort -rn | head -10
+
+# 4. Import complexity
+echo "=== Most Common Imports ==="
+grep -rh "^import \|^from " {{PROJECT_PATH}} --include="*.py" 2>/dev/null | sort | uniq -c | sort -rn | head -15
+
+# 5. TODO/FIXME/HACK debt markers
+echo "=== Technical Debt Markers ==="
+grep -rn "TODO\|FIXME\|HACK\|XXX" {{PROJECT_PATH}} --include="*.py" --include="*.ts" --include="*.js" 2>/dev/null | head -20
+DEBT_COUNT=$(grep -r "TODO\|FIXME\|HACK\|XXX" {{PROJECT_PATH}} --include="*.py" --include="*.ts" --include="*.js" 2>/dev/null | wc -l)
+echo "Total debt markers: $DEBT_COUNT"
+
+# 6. Test coverage ratio (files)
+echo "=== Test File Ratio ==="
+TOTAL_FILES=$(find {{PROJECT_PATH}} \( -name "*.py" -o -name "*.ts" -o -name "*.js" \) 2>/dev/null | wc -l)
+TEST_FILES=$(find {{PROJECT_PATH}} \( -name "test_*.py" -o -name "*.test.ts" -o -name "*.test.js" -o -name "*.spec.ts" \) 2>/dev/null | wc -l)
+echo "Total source files: $TOTAL_FILES"
+echo "Test files: $TEST_FILES"
 ```
 
-Check for: hardcoded credentials, missing input validation, injection vulnerabilities.
+**Record these metrics in your review. Flag any of these:**
+- Files > 300 lines (potential god class)
+- Files with > 15 functions/classes (too many responsibilities)
+- Debt markers > 10 (accumulated technical debt)
+- Test file ratio < 20% (insufficient test coverage)
 
 ---
 
-## STEP 5: TEST COVERAGE
+## STEP 3: SPAWN CODE ANALYSIS SUBAGENTS (MANDATORY)
+
+**Use the Task tool to get deep analysis. You MUST spawn at least ONE subagent.**
+
+### 3.1 - Map Architecture (spawn this first)
+
+```
+Use Task tool:
+  subagent_type: "feature-dev:code-explorer"
+  prompt: "Analyze the architecture of {{PROJECT_PATH}}. Report:
+    1. Main modules and their single responsibility (or violation)
+    2. Dependency direction - do high-level modules depend on low-level? (DIP violation)
+    3. Any circular dependencies between modules
+    4. Data flow from entry points through the system
+    5. Coupling hotspots - which modules know too much about others?"
+```
+
+### 3.2 - Review Largest Files (spawn for files > 200 lines)
+
+```
+Use Task tool:
+  subagent_type: "feature-dev:code-reviewer"
+  prompt: "Review [FILE_PATH] (the largest file) for:
+    1. Single Responsibility violations - does this file do too many things?
+    2. Long methods (> 30 lines) that should be extracted
+    3. Deep nesting (> 3 levels) indicating complex logic
+    4. Code duplication within the file
+    5. Security issues: input validation, injection risks, hardcoded secrets"
+```
+
+**Document subagent findings in your review. If subagent finds issues, those become YOUR issues.**
+
+---
+
+## STEP 4: MANUAL CODE REVIEW
+
+After subagent analysis, manually review at least 5 files:
+
+**Review checklist per file:**
+- [ ] File has single, clear responsibility
+- [ ] No deep nesting (> 3 levels)
+- [ ] Error handling is present and appropriate
+- [ ] No hardcoded secrets or credentials
+- [ ] Naming is clear and consistent
+
+**Record which files you reviewed and your observations for each.**
+
+---
+
+## STEP 5: SECURITY SCAN
 
 ```bash
-# Detect and run appropriate test command
-if [ -f "pytest.ini" ] || [ -f "pyproject.toml" ] || [ -f "setup.py" ]; then
-    pytest --cov=. --cov-report=term-missing 2>/dev/null || pytest -v
-elif [ -f "package.json" ]; then
-    npm test -- --coverage 2>/dev/null || npm test
-fi
+# Hardcoded secrets
+echo "=== Potential Secrets ==="
+grep -rn "password\|api_key\|secret\|token\|apikey\|api-key" --include="*.py" --include="*.ts" --include="*.js" {{PROJECT_PATH}} 2>/dev/null | grep -v node_modules | grep -v "\.env\.example" | head -20
+
+# SQL injection risks (raw queries)
+echo "=== Potential SQL Injection ==="
+grep -rn "execute\|raw\|cursor" --include="*.py" {{PROJECT_PATH}} 2>/dev/null | head -10
+
+# Dangerous functions
+echo "=== Dangerous Functions ==="
+grep -rn "eval\|exec\|subprocess\|os\.system\|shell=True" --include="*.py" {{PROJECT_PATH}} 2>/dev/null | head -10
 ```
+
+Check for: hardcoded credentials, missing input validation, injection vulnerabilities, dangerous function usage.
 
 ---
 
-## STEP 6: WRITE REVIEW (USE SCRIPT - MANDATORY)
+## STEP 6: PRE-VERDICT CHECKLIST (MANDATORY)
+
+**Before writing ANY verdict, verify ALL boxes are checked:**
+
+| # | Requirement | Your Evidence |
+|---|-------------|---------------|
+| ☐ | Ran quantitative scan | Record total LOC, largest files, debt count |
+| ☐ | Spawned code-explorer subagent | Document architecture findings |
+| ☐ | Spawned code-reviewer on largest file | Document issues found (or "none") |
+| ☐ | Ran security grep scan | Record any findings |
+| ☐ | Manually reviewed 5+ files | List file paths + observations |
+| ☐ | Can explain WHY verdict is appropriate | Write justification |
+
+**If ANY checkbox is empty → you are NOT ready to write a verdict. Go back.**
+
+---
+
+## STEP 7: WRITE REVIEW (USE SCRIPT - MANDATORY)
 
 **Create issues JSON file:**
 
@@ -159,13 +265,26 @@ python3 scripts/reviews.py add-review \
 ```
 
 **Verdict Rules:**
-- `APPROVE`: No critical/major issues (health_status is GOOD or FAIR)
-- `REQUEST_CHANGES`: Has critical or major issues (health_status is NEEDS_ATTENTION)
+
+| Verdict | Condition | Required Justification |
+|---------|-----------|------------------------|
+| `REQUEST_CHANGES` | Has critical or major issues | List the issues |
+| `APPROVE` | No critical/major issues | Must explain WHY (see below) |
+
+**APPROVE Justification (REQUIRED if no critical/major issues):**
+
+You MUST include ONE of these justifications in your summary:
+1. **"Early-stage codebase"** - Total LOC < 2000, limited complexity expected
+2. **"Recent cleanup"** - Previous architecture review addressed issues (cite review ID)
+3. **"Specific strengths observed"** - Name 2-3 concrete positive patterns you found
+4. **"Minor issues documented"** - You found minor/suggestion issues (list them)
+
+**"No issues found" without justification = INVALID REVIEW. Go back to Step 3.**
 
 **Health Status:**
-- `GOOD`: No critical/major issues, coverage >80%
-- `FAIR`: No critical/major issues, coverage 60-80%
-- `NEEDS_ATTENTION`: Critical/major issues present OR coverage <60%
+- `GOOD`: No critical/major, justified approval
+- `FAIR`: Minor issues only, documented
+- `NEEDS_ATTENTION`: Critical or major issues present
 
 **Issue ID Format:**
 - `A{review_id}-C{n}` - Critical (security, blocking)
@@ -175,7 +294,63 @@ python3 scripts/reviews.py add-review \
 
 ---
 
-## STEP 7: RECORD SESSION AND HAND OFF (USE SCRIPT - MANDATORY)
+## STEP 8: WRITE PROGRESS SUMMARY (MANDATORY)
+
+**Before recording the session, create a progress summary file:**
+
+```bash
+# Get the next session ID
+SESSION_ID=$(python3 scripts/progress.py next-session-id)
+
+# Create progress directory if it doesn't exist
+mkdir -p "{{AGENT_STATE_DIR}}/progress"
+
+# Write the progress summary
+cat > "{{AGENT_STATE_DIR}}/progress/${SESSION_ID}.md" << 'EOF'
+# Session Summary: ARCHITECTURE
+
+## Quantitative Metrics
+- Total LOC: <count>
+- Largest file: <file> (<lines> lines)
+- Technical debt markers: <count>
+- Test file ratio: <percentage>
+
+## Subagent Findings
+- code-explorer: <summary of architecture findings>
+- code-reviewer: <summary of issues in largest file>
+
+## Files Manually Reviewed
+1. <file1> - <observation>
+2. <file2> - <observation>
+3. <file3> - <observation>
+4. <file4> - <observation>
+5. <file5> - <observation>
+
+## Security Scan Results
+- <findings or "No issues found">
+
+## Issues Found
+- <issue_id>: <severity> - <brief description> (if any)
+
+## Health Status
+- <GOOD|FAIR|NEEDS_ATTENTION>
+
+## Verdict Justification
+- <Why this verdict is appropriate>
+
+## Recommendations for Next Coder
+- <specific guidance based on findings>
+
+## Verdict
+- <APPROVE|REQUEST_CHANGES>
+EOF
+```
+
+**Edit the file to reflect your actual work before proceeding.**
+
+---
+
+## STEP 9: RECORD SESSION AND HAND OFF (USE SCRIPT - MANDATORY)
 
 **REMINDER:** You have NOT touched any source code. You have ONLY identified issues.
 Now record your findings and hand off to the appropriate next agent.
@@ -185,15 +360,15 @@ Now record your findings and hand off to the appropriate next agent.
 ```bash
 python3 scripts/progress.py add-session \
   --agent-type ARCHITECTURE \
-  --summary "Architecture review: GOOD. No critical issues found." \
+  --summary "Architecture review: <GOOD|FAIR>. <justification>" \
   --outcome SUCCESS \
   --next-phase IMPLEMENT \
   --current-feature null \
   --current-branch null
 
 # Commit tracking files
-git add progress.json reviews.json
-git commit -m "Architecture review: GOOD"
+git add "{{AGENT_STATE_DIR}}/progress.json" "{{AGENT_STATE_DIR}}/reviews.json" "{{AGENT_STATE_DIR}}/progress/"
+git commit -m "Architecture review: <health_status>"
 ```
 
 **If verdict is REQUEST_CHANGES (has critical/major issues):**
@@ -208,7 +383,7 @@ python3 scripts/progress.py add-session \
   --current-branch null
 
 # Commit tracking files
-git add progress.json reviews.json
+git add "{{AGENT_STATE_DIR}}/progress.json" "{{AGENT_STATE_DIR}}/reviews.json" "{{AGENT_STATE_DIR}}/progress/"
 git commit -m "Architecture review: NEEDS_ATTENTION - handing off to FIX"
 ```
 
@@ -219,9 +394,14 @@ git commit -m "Architecture review: NEEDS_ATTENTION - handing off to FIX"
 ## COMPLETION
 
 Review is complete when:
-1. Review added via `scripts/reviews.py add-review`
-2. Session added via `scripts/progress.py add-session`
-3. `current_phase` set to FIX (if issues) or IMPLEMENT (if clean)
+1. Quantitative scan completed and recorded
+2. At least one subagent spawned and findings documented
+3. 5+ files manually reviewed with observations
+4. Security scan completed
+5. Pre-verdict checklist ALL checked
+6. Review added via `scripts/reviews.py add-review` with justification
+7. Session added via `scripts/progress.py add-session`
+8. `current_phase` set to FIX (if issues) or IMPLEMENT (if clean)
 
 The FIX agent will address any critical/major issues before the next feature.
 

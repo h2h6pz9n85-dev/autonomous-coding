@@ -16,6 +16,7 @@ Commands:
     get-status        Get current status (or specific field with --field)
     get-session       Get a specific session (or specific field with --field)
     get-review-type   Determine if current review is FEATURE or ARCHITECTURE_REFACTOR
+    next-session-id   Get the next session ID (current count + 1)
     list              List all sessions
 
 Field Access (no Python parsing needed):
@@ -293,6 +294,18 @@ def cmd_get_review_type(args) -> None:
         print(f"BRANCH: {branch}")
 
 
+def cmd_next_session_id(args) -> None:
+    """Get the next session ID (current count + 1)."""
+    data = load_progress(args.file)
+    if data is None:
+        print(f"ERROR: {args.file} does not exist.", file=sys.stderr)
+        sys.exit(1)
+
+    sessions = data.get("sessions", [])
+    next_id = max([s.get("session_id", 0) for s in sessions], default=0) + 1
+    print(next_id)
+
+
 def cmd_list(args) -> None:
     """List all sessions."""
     data = load_progress(args.file)
@@ -315,8 +328,14 @@ def main():
     parser.add_argument(
         "--file", "-f",
         type=Path,
-        default=Path("progress.json"),
-        help="Path to progress.json"
+        default=None,
+        help="Path to progress.json (overrides --agent-state-dir)"
+    )
+    parser.add_argument(
+        "--agent-state-dir", "-d",
+        type=Path,
+        default=None,
+        help="Agent state directory (progress.json will be in this dir)"
     )
 
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -330,7 +349,7 @@ def main():
     # add-session
     add_parser = subparsers.add_parser("add-session", help="Add session entry")
     add_parser.add_argument("--agent-type", "-a", required=True,
-                           choices=["INITIALIZER", "IMPLEMENT", "REVIEW", "FIX", "ARCHITECTURE"],
+                           choices=["INITIALIZER", "BROWNFIELD_INITIALIZER", "IMPLEMENT", "BUGFIX", "REVIEW", "FIX", "ARCHITECTURE", "GLOBAL_FIX"],
                            help="Agent type")
     add_parser.add_argument("--summary", "-s", required=True, help="Session summary")
     add_parser.add_argument("--outcome", "-o", required=True,
@@ -342,14 +361,14 @@ def main():
     add_parser.add_argument("--commit-from", help="Starting commit of range")
     add_parser.add_argument("--commit-to", help="Ending commit of range")
     add_parser.add_argument("--started-at", help="Session start time (ISO 8601)")
-    add_parser.add_argument("--next-phase", choices=["IMPLEMENT", "REVIEW", "FIX", "ARCHITECTURE"],
+    add_parser.add_argument("--next-phase", choices=["IMPLEMENT", "REVIEW", "FIX", "ARCHITECTURE", "GLOBAL_FIX"],
                            help="Set next phase")
     add_parser.add_argument("--current-feature", help="Set current feature (use 'null' to clear)")
     add_parser.add_argument("--current-branch", help="Set current branch (use 'null' to clear)")
 
     # update-status
     status_parser = subparsers.add_parser("update-status", help="Update status")
-    status_parser.add_argument("--phase", choices=["IMPLEMENT", "REVIEW", "FIX", "ARCHITECTURE"])
+    status_parser.add_argument("--phase", choices=["IMPLEMENT", "REVIEW", "FIX", "ARCHITECTURE", "GLOBAL_FIX"])
     status_parser.add_argument("--feature", help="Current feature (use 'null' to clear)")
     status_parser.add_argument("--branch", help="Current branch (use 'null' to clear)")
     status_parser.add_argument("--features-completed", type=int)
@@ -367,10 +386,24 @@ def main():
     # get-review-type
     subparsers.add_parser("get-review-type", help="Determine review type (FEATURE or ARCHITECTURE_REFACTOR)")
 
+    # next-session-id
+    subparsers.add_parser("next-session-id", help="Get the next session ID")
+
     # list
     subparsers.add_parser("list", help="List all sessions")
 
     args = parser.parse_args()
+
+    # Resolve file path: --file > --agent-state-dir > AGENT_STATE_DIR env > current dir
+    import os
+    if args.file is not None:
+        pass  # Use explicit file path
+    elif args.agent_state_dir is not None:
+        args.file = args.agent_state_dir / "progress.json"
+    elif os.environ.get("AGENT_STATE_DIR"):
+        args.file = Path(os.environ["AGENT_STATE_DIR"]) / "progress.json"
+    else:
+        args.file = Path("progress.json")  # Default to current directory
 
     commands = {
         "init": cmd_init,
@@ -379,6 +412,7 @@ def main():
         "get-status": cmd_get_status,
         "get-session": cmd_get_session,
         "get-review-type": cmd_get_review_type,
+        "next-session-id": cmd_next_session_id,
         "list": cmd_list,
     }
 

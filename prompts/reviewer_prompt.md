@@ -33,7 +33,14 @@ You are reviewing code for the current project ONLY. You may ONLY:
 - Git operations (merge, branch delete) for approved features
 - Commit tracking files (`progress.json`, `reviews.json`, `feature_list.json`)
 
-**If you find issues, document them in the review. The FIX agent will handle implementation.**
+**Issue handling by severity:**
+
+| Severity | Verdict | Who fixes | When |
+|----------|---------|-----------|------|
+| CRITICAL/MAJOR | REQUEST_CHANGES | FIX agent | Immediately (next session) |
+| MINOR/SUGGESTION | APPROVE or PASS_WITH_COMMENTS | GLOBAL_FIX agent | When tech debt accumulates (deferred) |
+
+When you APPROVE with minor issues, create DEBT entries (Step 8) so they're tracked and eventually fixed.
 
 ---
 
@@ -173,26 +180,96 @@ Review the code against:
 
 ## STEP 5: RUN THE TESTS
 
-```bash
-pytest tests/ -v
-npm test
-npx playwright test
-```
+Run the project's test command(s) - check README, CLAUDE.md, or build files for the correct commands.
 
 **If tests fail, this is an automatic REQUEST_CHANGES.**
 
 ---
 
-## STEP 6: VERIFY THROUGH BROWSER (CRITICAL!)
+## VERIFICATION PRINCIPLE - CATASTROPHIC REQUIREMENT
 
-Use Playwright MCP tools:
+**VERIFY AT THE LAYER YOU'RE CLAIMING**
 
-- `mcp__plugin_playwright_playwright__browser_navigate` - Go to the application
-- `mcp__plugin_playwright_playwright__browser_snapshot` - Get page tree
-- `mcp__plugin_playwright_playwright__browser_click` - Click elements
-- `mcp__plugin_playwright_playwright__browser_take_screenshot` - Capture screenshots
+Every claim requires direct evidence from the appropriate layer. Indirect evidence
+from a different layer CANNOT substitute, no matter how suggestive.
 
-Verify the feature works as specified.
+```
+┌─────────────────┬────────────────────────┬─────────────────────────────────┐
+│ CLAIM           │ DIRECT EVIDENCE        │ INVALID INDIRECT EVIDENCE       │
+├─────────────────┼────────────────────────┼─────────────────────────────────┤
+│ UI displays X   │ Screenshot showing X   │ File has X, API returns X,      │
+│                 │                        │ DOM contains X, code renders X  │
+├─────────────────┼────────────────────────┼─────────────────────────────────┤
+│ Tests pass      │ Test runner output     │ Code looks correct, "should     │
+│                 │ showing PASS           │ work", ran tests "earlier"      │
+├─────────────────┼────────────────────────┼─────────────────────────────────┤
+│ API works       │ Actual API response    │ Endpoint defined, handler       │
+│                 │ with expected data     │ implemented, types match        │
+├─────────────────┼────────────────────────┼─────────────────────────────────┤
+│ Build succeeds  │ Build command output   │ Code compiles, deps installed,  │
+│                 │ showing success        │ worked last time                │
+├─────────────────┼────────────────────────┼─────────────────────────────────┤
+│ E2E works       │ E2E test pass or       │ Unit tests pass, integration    │
+│                 │ manual walkthrough     │ tests pass, "components work"   │
+├─────────────────┼────────────────────────┼─────────────────────────────────┤
+│ Bug is fixed    │ Reproduction steps     │ Code change looks right,        │
+│                 │ no longer trigger bug  │ related tests pass              │
+└─────────────────┴────────────────────────┴─────────────────────────────────┘
+```
+
+**The Anti-Pattern: Cross-Layer Inference**
+
+```
+❌ "The API endpoint is defined and the handler is implemented correctly,
+    so the API must work."                    → WRONG (code ≠ runtime)
+
+❌ "Unit tests pass, so E2E must work."       → WRONG (unit ≠ integration)
+
+❌ "The file contains the data, so the UI
+    must display it."                         → WRONG (data ≠ rendering)
+
+❌ "I ran the tests earlier and they passed." → WRONG (past ≠ present)
+
+❌ "The code change looks correct, so the
+    bug must be fixed."                       → WRONG (code ≠ behavior)
+```
+
+**Enforcement: When you cannot obtain direct evidence, the claim is UNVERIFIED.**
+
+Do not substitute. Do not infer. Do not assume. REQUEST_CHANGES.
+
+---
+
+## STEP 6: VERIFY THROUGH BROWSER (UI FEATURES)
+
+**Applying the verification principle: For UI claims, screenshots are direct evidence.**
+
+**If you cannot obtain a screenshot showing the feature working → REQUEST_CHANGES.**
+
+Environment issues, server failures, Python mismatches - these are obstacles, not excuses.
+Document the obstacle. The FIX agent will resolve it.
+
+**Verification Steps:**
+
+```bash
+# 1. Start the application (check project setup for commands)
+# 2. Navigate to the feature URL
+mcp__plugin_playwright_playwright__browser_navigate
+
+# 3. Interact with the feature
+mcp__plugin_playwright_playwright__browser_click
+
+# 4. CAPTURE DIRECT EVIDENCE
+mcp__plugin_playwright_playwright__browser_take_screenshot
+# Save to: progress/<session_id>-<feature_id>.png
+```
+
+**Self-Check Before Claiming UI Verification:**
+
+> "Can I point to the exact pixels in my screenshot where the feature is working?"
+
+YES → You have verified. Proceed.
+NO → You have NOT verified. REQUEST_CHANGES.
 
 ---
 
@@ -236,7 +313,96 @@ python3 scripts/reviews.py add-review \
 
 ---
 
-## STEP 8: TAKE ACTION BASED ON VERDICT
+## STEP 8: CREATE TECH DEBT ENTRIES (IF APPROVING WITH MINOR ISSUES)
+
+**If you found minor/suggestion issues but are APPROVING or giving PASS_WITH_COMMENTS, convert them to tech debt entries:**
+
+This ensures minor issues don't get lost - they'll be addressed by the GLOBAL_FIX agent when accumulated.
+
+```bash
+# Get next DEBT ID
+NEXT_DEBT_ID=$(python3 scripts/features.py next-id --type DEBT)
+
+# Get current review ID for source tracking
+REVIEW_ID=$(python3 scripts/reviews.py get-last --field review_id)
+```
+
+**Create entries JSON and append:**
+
+```bash
+cat > /tmp/debt_entries.json << 'EOF'
+[
+  {
+    "id": "DEBT-001",
+    "name": "Refactor: <brief description>",
+    "description": "<full description of issue>",
+    "type": "tech_debt",
+    "priority": 999,
+    "category": "code_quality",
+    "source_review": "R<review_id>",
+    "source_feature": "<feature_id>",
+    "location": "path/to/file.py:line",
+    "suggestion": "<how to fix>",
+    "passes": false
+  }
+]
+EOF
+
+python3 scripts/features.py append \
+  --entries "$(cat /tmp/debt_entries.json)" \
+  --source-appspec "code_review"
+```
+
+**Skip this step if:**
+- Verdict is REQUEST_CHANGES (issues go to FIX agent instead)
+- No minor/suggestion issues were found
+
+---
+
+## STEP 9: WRITE PROGRESS SUMMARY (MANDATORY)
+
+**Before recording the session, create a progress summary file:**
+
+```bash
+# Get the next session ID
+SESSION_ID=$(python3 scripts/progress.py next-session-id)
+
+# Create progress directory if it doesn't exist
+mkdir -p "{{AGENT_STATE_DIR}}/progress"
+
+# Write the progress summary
+cat > "{{AGENT_STATE_DIR}}/progress/${SESSION_ID}.md" << 'EOF'
+# Session Summary: REVIEW
+
+## Feature Reviewed
+- <feature_id>: <feature_name>
+- Branch: <branch_name>
+
+## Verdict
+- <APPROVE|REQUEST_CHANGES|PASS_WITH_COMMENTS|REJECT>
+
+## Issues Found
+- <issue_id>: <severity> - <brief description> (if any)
+
+## Tests Verified
+- <test results summary>
+
+## Browser Verification
+- <verification status>
+
+## Action Taken
+- <merged/sent to FIX/rejected>
+
+## Notes
+- <any relevant observations or context for future sessions>
+EOF
+```
+
+**Edit the file to reflect your actual work before proceeding.**
+
+---
+
+## STEP 10: TAKE ACTION BASED ON VERDICT
 
 ### If APPROVE (no issues):
 
@@ -270,7 +436,7 @@ python3 scripts/progress.py update-status \
   --features-passing <new_count>
 
 # 5. Commit tracking files
-git add progress.json feature_list.json reviews.json
+git add "{{AGENT_STATE_DIR}}/progress.json" "{{AGENT_STATE_DIR}}/feature_list.json" "{{AGENT_STATE_DIR}}/reviews.json" "{{AGENT_STATE_DIR}}/progress/"
 git commit -m "Review: Approved and merged <feature_id>"
 ```
 
@@ -292,7 +458,7 @@ python3 scripts/progress.py add-session \
   --current-branch null
 
 # 3. Commit tracking files
-git add progress.json reviews.json
+git add "{{AGENT_STATE_DIR}}/progress.json" "{{AGENT_STATE_DIR}}/reviews.json" "{{AGENT_STATE_DIR}}/progress/"
 git commit -m "Review: Approved architecture refactoring"
 ```
 
@@ -316,7 +482,7 @@ python3 scripts/progress.py add-session \
   --next-phase FIX
 
 # Commit
-git add progress.json reviews.json
+git add "{{AGENT_STATE_DIR}}/progress.json" "{{AGENT_STATE_DIR}}/reviews.json" "{{AGENT_STATE_DIR}}/progress/"
 git commit -m "Review: Requested changes for <feature_id>"
 ```
 
@@ -384,7 +550,7 @@ python3 scripts/progress.py add-session \
   --current-branch null
 
 # Commit
-git add progress.json reviews.json
+git add "{{AGENT_STATE_DIR}}/progress.json" "{{AGENT_STATE_DIR}}/reviews.json" "{{AGENT_STATE_DIR}}/progress/"
 git commit -m "Review: Rejected <feature_id>"
 ```
 
@@ -394,10 +560,20 @@ git commit -m "Review: Rejected <feature_id>"
 
 | Verdict | Meaning | Action |
 |---------|---------|--------|
-| `APPROVE` | No issues | Merge, mark passing |
-| `PASS_WITH_COMMENTS` | Minor issues | Send to FIX (or merge if 3+ attempts) |
-| `REQUEST_CHANGES` | Must fix | Send to FIX (or reject if 3+ attempts) |
+| `APPROVE` | No issues AND verified visually | Merge, mark passing |
+| `PASS_WITH_COMMENTS` | Minor issues, verified visually | Send to FIX (or merge if 3+ attempts) |
+| `REQUEST_CHANGES` | Must fix OR unable to verify UI | Send to FIX (or reject if 3+ attempts) |
 | `REJECT` | Fundamental problems | Delete branch, re-implement |
+
+**APPROVE Requirements:**
+- All tests pass
+- Code review complete
+- **UI features: Screenshot captured proving feature works**
+
+**Automatic REQUEST_CHANGES Triggers:**
+- Tests fail
+- Critical/major code issues found
+- **UI feature but no screenshot verification** (environment issues = REQUEST_CHANGES)
 
 ---
 
@@ -412,6 +588,55 @@ git commit -m "Review: Rejected <feature_id>"
 **Be Specific:** Give actionable feedback with file paths and line numbers
 
 **Use Scripts:** ALL data file access MUST go through scripts
+
+**CRITICAL - Visual Verification Gate:**
+- You CANNOT approve UI features without screenshot proof
+- "Unable to verify" = REQUEST_CHANGES, not APPROVE
+- Environment problems are blockers, not excuses
+- Next agent handles environment fixes - that's their job
+
+---
+
+## ANTI-PATTERN: CROSS-LAYER INFERENCE
+
+**The Pattern (CATASTROPHICALLY WRONG):**
+
+```
+1. Agent needs to verify claim at Layer A
+2. Agent encounters obstacle obtaining Layer A evidence
+3. Agent gathers evidence from Layer B instead
+4. Agent uses "however", "but", "therefore" to bridge the gap
+5. Agent claims Layer A is verified based on Layer B evidence
+6. Agent approves
+
+VERDICT: APPROVE  ← WRONG
+```
+
+**The Correct Pattern:**
+
+```
+1. Agent needs to verify claim at Layer A
+2. Agent encounters obstacle obtaining Layer A evidence
+3. Agent acknowledges: "I cannot verify [Layer A claim]"
+4. Agent does NOT pivot to other layers
+5. Agent requests changes
+
+VERDICT: REQUEST_CHANGES  ← CORRECT
+Issue: "Unable to verify [claim]. [Obstacle encountered]. Direct evidence required."
+```
+
+**Detection Signals - If you write any of these, STOP:**
+
+- "I cannot verify X... however, Y shows..."
+- "Although I couldn't [direct verification]... the [indirect evidence] confirms..."
+- "The [different layer] proves that [claim]..."
+- "EXCELLENT!" or "Perfect!" before obtaining direct evidence
+- Any enthusiasm based on indirect evidence
+
+**The Rule Is Simple:**
+
+No direct evidence at the claim's layer = REQUEST_CHANGES. No exceptions.
+No cross-layer inference. No substitution. No "should work."
 
 ---
 

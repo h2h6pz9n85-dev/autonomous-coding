@@ -470,11 +470,11 @@ class TestAgentSessionMocking:
 
         mock_process = AsyncMock()
         mock_process.returncode = 0
-        mock_process.stdout.read = AsyncMock(side_effect=[
-            b"Agent output here...",
+        mock_process.stdout.readline = AsyncMock(side_effect=[
+            b"Agent output here...\n",
             b"",  # EOF
         ])
-        mock_process.stderr.read = AsyncMock(return_value=b"")
+        mock_process.stderr.readline = AsyncMock(return_value=b"")
         mock_process.wait = AsyncMock()
 
         with patch('asyncio.create_subprocess_exec', return_value=mock_process):
@@ -495,8 +495,8 @@ class TestAgentSessionMocking:
 
         mock_process = AsyncMock()
         mock_process.returncode = 1
-        mock_process.stdout.read = AsyncMock(side_effect=[b"", b""])
-        mock_process.stderr.read = AsyncMock(return_value=b"Error occurred")
+        mock_process.stdout.readline = AsyncMock(side_effect=[b"", b""])
+        mock_process.stderr.readline = AsyncMock(return_value=b"Error occurred\n")
         mock_process.wait = AsyncMock()
 
         with patch('asyncio.create_subprocess_exec', return_value=mock_process):

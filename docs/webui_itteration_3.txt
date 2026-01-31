@@ -1,0 +1,21 @@
+Features: 
+1. UI should show most recent sessions first. 
+2. Sessions should load as user scrolls down. 
+3. User should be able to provide input to the agent:
+    - by clicking button on top of the page
+    - modal window should appear with input text field where user can type the feature, bug or review request
+    - input is persisted in the folder "/inputs". folder to be created if not existed
+    - input file name should be "input_" + timestamp + ".txt"
+    - after submission, modal should close and user should see a toast notification "Input submitted"
+    - if new input is submitted, next agent should be "BROWNFIELD_INITIALIZER" and it should process the input filet to create app_spec_*.txt file and append to features list (normal flow)
+    - agents flow continues as usual
+4. Instead of expands in UI cells, there should be buttons that when clicked should show the content in modal window. 
+    - for each cell there should be a button "Show content"
+    - modal window should show the content of the cell
+    - modal window should have a close button
+    - modal window should be scrollable
+    - modal window should be centered on the screen
+5. User should be able to invalide a feature by clicking in the cell. Invalidation action should call API endpoint:
+    - endpo should take a session ID as an input parameter
+    - on backed session to be looked up 
+    - "features_touched" from that session should be found in feature_list.json and passes to be set to "false"

@@ -10,19 +10,19 @@ from pathlib import Path
 from typing import Optional
 
 
-def count_passing_features(project_dir: Path) -> tuple[int, int]:
+def count_passing_features(state_dir: Path) -> tuple[int, int]:
     """
     Count passing and total features in feature_list.json.
 
     Handles both flat array format and nested {features: [...]} format.
 
     Args:
-        project_dir: Directory containing feature_list.json
+        state_dir: Agent state directory containing feature_list.json
 
     Returns:
         (passing_count, total_count)
     """
-    tests_file = project_dir / "feature_list.json"
+    tests_file = state_dir / "feature_list.json"
 
     if not tests_file.exists():
         return 0, 0
@@ -47,17 +47,17 @@ def count_passing_features(project_dir: Path) -> tuple[int, int]:
         return 0, 0
 
 
-def get_next_feature(project_dir: Path) -> Optional[dict]:
+def get_next_feature(state_dir: Path) -> Optional[dict]:
     """
     Get the next unimplemented feature from feature_list.json.
 
     Args:
-        project_dir: Directory containing feature_list.json
+        state_dir: Agent state directory containing feature_list.json
 
     Returns:
         The next feature dict or None if all complete
     """
-    tests_file = project_dir / "feature_list.json"
+    tests_file = state_dir / "feature_list.json"
 
     if not tests_file.exists():
         return None
@@ -105,9 +105,9 @@ def print_session_header(
     print()
 
 
-def print_progress_summary(project_dir: Path) -> None:
+def print_progress_summary(state_dir: Path) -> None:
     """Print a summary of current progress."""
-    passing, total = count_passing_features(project_dir)
+    passing, total = count_passing_features(state_dir)
 
     if total > 0:
         percentage = (passing / total) * 100

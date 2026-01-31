@@ -306,11 +306,19 @@ def log(message: str, level: str = "INFO") -> None:
     print(f"[{timestamp()}] [{level}] {message}", flush=True)
 
 
+def strip_ansi(text: str) -> str:
+    """Remove ANSI escape codes from text for clean file logging."""
+    import re
+    ansi_escape = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
+    return ansi_escape.sub('', text)
+
+
 async def run_agent_session(
     prompt: str,
     project_dir: Path,
     model: str,
     config: "AgentConfig" = None,
+    console_log_path: Optional[Path] = None,
 ) -> tuple[str, str]:
     """
     Run a single agent session using Claude Code CLI.
@@ -320,14 +328,19 @@ async def run_agent_session(
         project_dir: Project directory path
         model: Model to use (sonnet, opus, haiku)
         config: Full agent configuration
+        console_log_path: Optional path to write console output to file
 
     Returns:
         (status, response_text) where status is:
         - "continue" if agent should continue working
         - "error" if an error occurred
     """
+    import os
+
     log(f"Starting agent session with model: {model}")
     log(f"Working directory: {project_dir.resolve()}")
+    if config and config.agent_state_dir and config.agent_state_dir != project_dir:
+        log(f"Agent state directory: {config.agent_state_dir.resolve()}")
     log(f"Prompt length: {len(prompt)} chars")
 
     # Build the command
@@ -347,13 +360,36 @@ async def run_agent_session(
     log(f"Allowed tools: {len(ALLOWED_TOOLS)} tools configured")
     log("Launching Claude Code CLI...")
 
+    # Open console log file if path provided
+    console_log_file = None
+    if console_log_path:
+        console_log_path.parent.mkdir(parents=True, exist_ok=True)
+        console_log_file = open(console_log_path, 'w', encoding='utf-8')
+        log(f"Console output will be saved to: {console_log_path}")
+
+    def write_output(text: str, end: str = "", newline: bool = False) -> None:
+        """Write output to both console and log file."""
+        print(text, end=end, flush=True)
+        if console_log_file:
+            clean_text = strip_ansi(text)
+            console_log_file.write(clean_text + end)
+            if newline:
+                console_log_file.write('\n')
+            console_log_file.flush()
+
     try:
+        # Set up environment with AGENT_STATE_DIR for scripts
+        env = os.environ.copy()
+        if config and config.agent_state_dir:
+            env["AGENT_STATE_DIR"] = str(config.agent_state_dir.resolve())
+
         # Run Claude Code CLI with streaming output
         process = await asyncio.create_subprocess_exec(
             *cmd,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
             cwd=str(project_dir.resolve()),
+            env=env,
             limit=10 * 1024 * 1024,  # 10MB buffer limit
         )
 
@@ -370,7 +406,8 @@ async def run_agent_session(
                 await asyncio.sleep(HEARTBEAT_INTERVAL_SECONDS)
                 elapsed = asyncio.get_event_loop().time() - last_output_time
                 if elapsed >= HEARTBEAT_INTERVAL_SECONDS:
-                    log(f"Agent still running... (no output for {int(elapsed)}s)", "WAIT")
+                    msg = f"[{timestamp()}] [WAIT] Agent still running... (no output for {int(elapsed)}s)"
+                    write_output(msg, end="\n")
 
         async def read_stdout():
             """Read stdout line by line."""
@@ -385,7 +422,7 @@ async def run_agent_session(
                 if text:
                     output = parser.parse_line(text, debug=False)
                     if output:
-                        print(output, end="", flush=True)
+                        write_output(output, end="")
 
         async def read_stderr():
             """Read stderr line by line."""
@@ -397,7 +434,8 @@ async def run_agent_session(
                 last_output_time = asyncio.get_event_loop().time()
                 text = line.decode('utf-8', errors='replace').rstrip('\n')
                 if text:
-                    print(f"[{timestamp()}] [STDERR] {text}", flush=True)
+                    msg = f"[{timestamp()}] [STDERR] {text}"
+                    write_output(msg, end="\n")
 
         # Start heartbeat monitor
         heartbeat_task = asyncio.create_task(heartbeat_monitor())
@@ -414,10 +452,10 @@ async def run_agent_session(
 
         await process.wait()
 
-        print()  # Newline after streaming
+        write_output("\n", end="")  # Newline after streaming
         log(f"Process exited with code: {process.returncode}")
         log(f"Total bytes received: {bytes_received}")
-        print("-" * 70)
+        write_output("-" * 70, end="\n")
 
         if process.returncode != 0:
             log(f"Process failed with exit code {process.returncode}", "ERROR")
@@ -432,3 +470,6 @@ async def run_agent_session(
     except Exception as e:
         log(f"Error during agent session: {e}", "ERROR")
         return "error", str(e)
+    finally:
+        if console_log_file:
+            console_log_file.close()

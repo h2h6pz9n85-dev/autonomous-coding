@@ -1,0 +1,17 @@
+There are a few issues with current implementation. The one issue is that the scripts folder is in a root of autonomous coding directory. And this is the problem because agents do not understand that they need to leverage the scripts. They cannot see the scripts folder.
+
+So what needs to be done is an initialization agent that first must copy the scripts into the folder. Maybe it should be done by agent. It can be done just by Python pipeline orchestrator. 
+
+
+The other thing that I want to be improved is that right now we are strictly forcing through prompts agents to work only on a single feature for implementation and then reviewer and architect to look only in a single feature. I want to make it less restrictive. I want to explicitly guide implementation agent to select maximum amount of feature that it can confidently execute and make sure that the features that it's working on are tightly related.
+
+I'm thinking that maybe up to four or five features can be taken at the same time. I also want you to check current scripts that are used for feature selection and progress tracking. So then they allow for more features to be checked at the same time and implemented as well as reviewed and fixed.
+
+So it's not as restrictive to single feature as it is right now. 
+
+I'm also thinking that I should deny explicitly through settings file, see URL, so then agent do not attempt to bypass testing via user interface. 
+
+Also, I want to implement the feature that autonomous coding agents can start from already existing repository. They should look into the progress, features, list, and reviews. If those two exist, then the next agent should just pick up from where it was left in the previous iteration. So do not reinitialize the project from scratch all the time. 
+
+
+All functionality highlighted above need to be covered by the test and confirm that it is working. 
